@@ -7,6 +7,7 @@ import {
   getMonthlySummary,
   getMonthlyRecords,
   getExpensesByCategory,
+  getFinanceAdvice,
   type FinanceSummary,
   type MonthlySummary,
   type MonthlyDetail,
@@ -27,24 +28,26 @@ export default function ContabilidadPage() {
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
-  const [queryMonth, setQueryMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [queryResult, setQueryResult] = useState<{ income: number; expenses: number; balance: number } | null>(null);
+  const [alerts, setAlerts] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"general" | "month">("general");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
-    getFinanceSummary().then(setSummary);
+    getFinanceSummary().then((s) => {
+      setSummary(s);
+      getFinanceAdvice(s).then((r) => setAlerts(r.alertas));
+    });
     getMonthlySummary().then(setMonthly);
     getMonthlyRecords().then(setMonthlyDetails);
     getExpensesByCategory().then(setCategories);
   }, []);
 
-  useEffect(() => {
-    const detail = monthlyDetails.find((m) => m.month === queryMonth);
-    if (detail) {
-      setQueryResult({ income: detail.income, expenses: detail.expenses, balance: detail.balance });
-    } else {
-      setQueryResult({ income: 0, expenses: 0, balance: 0 });
-    }
-  }, [queryMonth, monthlyDetails]);
+  const monthData = monthlyDetails.find((m) => m.month === selectedMonth);
+
+  const displayIncome = viewMode === "month" && monthData ? monthData.income : summary?.totalIncome ?? 0;
+  const displayExpenses = viewMode === "month" && monthData ? monthData.expenses : summary?.totalExpenses ?? 0;
+  const displayBalance = viewMode === "month" && monthData ? monthData.balance : summary?.balance ?? 0;
 
   if (!summary) {
     return (
@@ -61,10 +64,92 @@ export default function ContabilidadPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold tracking-tight">Resumen financiero</h2>
+      {/* Notifications panel */}
+      {notifOpen && (
+        <div className="fixed inset-0 z-50" onClick={() => setNotifOpen(false)}>
+          <div
+            className="fixed right-6 top-4 w-80 rounded-xl border border-border bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h4 className="text-sm font-semibold text-foreground">Notificaciones</h4>
+              <button onClick={() => setNotifOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto p-4">
+              {alerts.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground">Sin notificaciones</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {alerts.map((a, i) => (
+                    <div key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      {a}
+                    </div>
+                  ))}
+                  <Link
+                    href="/contabilidad/ia"
+                    className="mt-1 text-center text-xs font-medium text-blue-600 hover:underline"
+                    onClick={() => setNotifOpen(false)}
+                  >
+                    Ver análisis completo →
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Title row with controls */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold tracking-tight">Resumen financiero</h2>
+        <div className="flex items-center gap-3">
+          {/* View mode toggle */}
+          <div className="flex overflow-hidden rounded-lg border border-border bg-gray-100 text-xs font-medium">
+            <button
+              onClick={() => setViewMode("general")}
+              className={`px-3 py-1.5 transition-colors ${viewMode === "general" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              General
+            </button>
+            <button
+              onClick={() => setViewMode("month")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${viewMode === "month" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Por mes
+              {viewMode === "month" && (
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-28 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700 outline-none"
+                />
+              )}
+            </button>
+          </div>
+          {/* Notifications bell */}
+          <button
+            onClick={() => setNotifOpen(!notifOpen)}
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:bg-muted/30"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {alerts.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                {alerts.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* Summary cards */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -72,8 +157,10 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Ingresos</p>
-            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(summary.totalIncome)}</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {viewMode === "month" && monthData ? "Ingresos · " + new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" }) : "Ingresos"}
+            </p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(displayIncome)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
@@ -83,19 +170,23 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Gastos</p>
-            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(summary.totalExpenses)}</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {viewMode === "month" && monthData ? "Gastos · " + new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" }) : "Gastos"}
+            </p>
+            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(displayExpenses)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
-          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${summary.balance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
+          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${displayBalance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Balance</p>
-            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(summary.balance)}</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {viewMode === "month" && monthData ? "Balance · " + new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" }) : "Balance"}
+            </p>
+            <p className={`mt-0.5 text-xl font-bold ${displayBalance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(displayBalance)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
@@ -105,40 +196,8 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Deudas</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Deudas activas</p>
             <p className="mt-0.5 text-xl font-bold text-amber-600">{summary.activeDebtsCount}</p>
-          </div>
-        </div>
-        {/* Month query card */}
-        <div className="rounded-xl border border-blue-200 bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wider text-blue-600">
-              {queryMonth
-                ? new Date(queryMonth + "-01").toLocaleDateString("es-ES", { month: "long", year: "numeric" })
-                : "Consulta por mes"}
-            </p>
-            <input
-              type="month"
-              value={queryMonth}
-              onChange={(e) => setQueryMonth(e.target.value)}
-              className="w-36 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-            />
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-blue-100 pt-3 text-center text-xs">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
-              <p className="mt-0.5 text-sm font-bold text-emerald-600">{formatCurrency(queryResult?.income ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
-              <p className="mt-0.5 text-sm font-bold text-red-500">{formatCurrency(queryResult?.expenses ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Balance</p>
-              <p className={`mt-0.5 text-sm font-bold ${(queryResult?.balance ?? 0) >= 0 ? "text-blue-600" : "text-red-500"}`}>
-                {formatCurrency(queryResult?.balance ?? 0)}
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -156,15 +215,19 @@ export default function ContabilidadPage() {
               {monthly.map((m) => {
                 const iw = (m.income / maxMonthly) * 100;
                 const ew = (m.expenses / maxMonthly) * 100;
+                const isSelected = m.month === selectedMonth && viewMode === "month";
                 return (
-                  <div key={m.month}>
+                  <div key={m.month} className={`rounded-lg p-2 transition-colors ${isSelected ? "bg-blue-50 ring-1 ring-blue-200" : ""}`}>
                     <div className="mb-1.5 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-foreground">
-                        {new Date(m.month + "-01").toLocaleDateString("es-ES", {
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                        <span className={`font-semibold ${isSelected ? "text-blue-700" : "text-foreground"}`}>
+                          {new Date(m.month + "-01").toLocaleDateString("es-ES", {
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
                       <span className={m.income - m.expenses >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-500"}>
                         {formatCurrency(m.income - m.expenses)}
                       </span>
