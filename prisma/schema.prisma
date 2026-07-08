@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  firebaseUid String   @unique
+  name        String
+  email       String   @unique
+  image                   String?
+  googleAccessToken       String?
+  googleRefreshToken      String?
+  googleCalendarConnected Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  ownedBoards    Board[]
+  memberships    BoardMember[]
+  assignedTasks  Task[]
+  comments       Comment[]
+  financeRecords FinanceRecord[]
+  fixedExpenses  FixedExpense[]
+  debts          Debt[]
+}
+
+model Board {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members BoardMember[]
+  columns Column[]
+  tasks   Task[]
+}
+
+model BoardMember {
+  id      String @id @default(cuid())
+  role    String @default("MEMBER")
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  boardId String
+  board   Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boardId])
+}
+
+model Column {
+  id        String   @id @default(cuid())
+  title     String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  tasks Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  priority    String   @default("media")
+  dueDate     DateTime?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  columnId String
+  column   Column @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  assigneeId   String?
+  assignee     User?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  googleEventId String?
+
+  comments Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model FinanceRecord {
+  id          String   @id @default(cuid())
+  type        String   // "income" | "expense" | "fixed" | "debt_payment"
+  amount      Float
+  description String
+  category    String?
+  date        DateTime @default(now())
+  isRecurring Boolean  @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  debtId String?
+  debt   Debt?  @relation(fields: [debtId], references: [id])
+}
+
+model FixedExpense {
+  id          String   @id @default(cuid())
+  name        String
+  amount      Float
+  category    String?
+  dayDue      Int      // día de vencimiento (1-31)
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Debt {
+  id           String   @id @default(cuid())
+  name         String
+  totalAmount  Float
+  paidAmount   Float    @default(0)
+  interestRate Float?
+  dueDate      DateTime?
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  payments FinanceRecord[]
+}

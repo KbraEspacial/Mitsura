@@ -1,0 +1,8 @@
+allowBuilds:
+  '@firebase/util': set this to true or false
+  '@prisma/engines': true
+  better-sqlite3: true
+  prisma: true
+  protobufjs: set this to true or false
+  sharp: true
+  unrs-resolver: true
