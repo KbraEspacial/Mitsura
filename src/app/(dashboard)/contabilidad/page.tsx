@@ -14,6 +14,63 @@ import {
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
 
+const CATEGORY_COLORS = [
+  "#ef4444", "#f59e0b", "#3b82f6", "#10b981", "#8b5cf6",
+  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
+  "#06b6d4", "#d946ef", "#e11d48", "#0ea5e9", "#65a30d",
+];
+
+function DonutChart({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return null;
+
+  const cx = 120;
+  const cy = 120;
+  const r = 90;
+  const strokeW = 28;
+
+  let currentAngle = -90;
+
+  const slices = data.map((d) => {
+    const pct = d.value / total;
+    const angle = pct * 360;
+    const start = currentAngle;
+    const end = currentAngle + angle;
+    currentAngle = end;
+
+    const sr = ((start * Math.PI) / 180);
+    const er = ((end * Math.PI) / 180);
+    const x1 = cx + r * Math.cos(sr);
+    const y1 = cy + r * Math.sin(sr);
+    const x2 = cx + r * Math.cos(er);
+    const y2 = cy + r * Math.sin(er);
+    const large = angle > 180 ? 1 : 0;
+
+    return {
+      path: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`,
+      color: d.color,
+      label: d.label,
+      value: d.value,
+      pct,
+    };
+  });
+
+  return (
+    <svg viewBox="0 0 240 240" className="h-48 w-48">
+      {slices.map((s, i) => (
+        <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={strokeW} strokeLinecap="butt" />
+      ))}
+      <circle cx={cx} cy={cy} r={r - strokeW / 2} fill="white" />
+      <text x={cx} y={cy - 6} textAnchor="middle" className="text-lg font-bold" fill="currentColor">
+        {data.length}
+      </text>
+      <text x={cx} y={cy + 12} textAnchor="middle" className="text-[10px]" fill="#6b7280">
+        conceptos
+      </text>
+    </svg>
+  );
+}
+
 export default function ContabilidadPage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
@@ -32,12 +89,6 @@ export default function ContabilidadPage() {
       </div>
     );
   }
-
-  const incomePct =
-    summary.totalIncome + summary.totalExpenses > 0
-      ? (summary.totalIncome / (summary.totalIncome + summary.totalExpenses)) * 100
-      : 50;
-  const expensePct = 100 - incomePct;
 
   const maxMonthly = Math.max(
     ...monthly.map((m) => Math.max(m.income, m.expenses)),
@@ -97,38 +148,39 @@ export default function ContabilidadPage() {
               No hay registros mensuales aún
             </p>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {monthly.map((m) => {
-                const incomeW = (m.income / maxMonthly) * 100;
-                const expenseW = (m.expenses / maxMonthly) * 100;
+                const max = maxMonthly;
                 return (
                   <div key={m.month}>
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span className="font-medium text-foreground">
+                    <div className="mb-1.5 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-foreground">
                         {new Date(m.month + "-01").toLocaleDateString("es-ES", {
                           month: "long",
                           year: "numeric",
                         })}
                       </span>
-                      <span className="text-muted-foreground">
+                      <span className={
+                        m.income - m.expenses >= 0
+                          ? "font-medium text-emerald-600"
+                          : "font-medium text-red-500"
+                      }>
                         {formatCurrency(m.income - m.expenses)}
                       </span>
                     </div>
-                    <div className="flex gap-0.5">
+                    <div className="relative h-7 w-full rounded-lg bg-gray-100">
                       <div
-                        className="h-5 rounded-l bg-emerald-400 transition-all"
-                        style={{ width: `${Math.max(incomeW, 2)}%` }}
-                        title={`Ingresos: ${formatCurrency(m.income)}`}
+                        className="absolute left-0 top-0 h-full rounded-l-lg bg-emerald-400 transition-all"
+                        style={{ width: `${(m.income / max) * 100}%` }}
                       />
                       <div
-                        className="h-5 rounded-r bg-red-400 transition-all"
-                        style={{ width: `${Math.max(expenseW, 2)}%` }}
-                        title={`Gastos: ${formatCurrency(m.expenses)}`}
+                        className="absolute right-0 top-0 h-full rounded-r-lg bg-red-400 transition-all"
+                        style={{ width: `${(m.expenses / max) * 100}%` }}
                       />
                     </div>
-                    <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-                      <span>{formatCurrency(m.income)}</span>
-                      <span>{formatCurrency(m.expenses)}</span>
+                    <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                      <span className="text-emerald-600">{formatCurrency(m.income)}</span>
+                      <span className="text-red-500">{formatCurrency(m.expenses)}</span>
                     </div>
                   </div>
                 );
@@ -146,62 +198,33 @@ export default function ContabilidadPage() {
               No hay gastos registrados aún
             </p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {categories.map((c) => (
-                <div key={c.category}>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="font-medium text-foreground">
-                      {c.category}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {formatCurrency(c.amount)}
-                    </span>
-                  </div>
-                  <div className="flex h-4 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className="rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.max(c.percentage, 1)}%` }}
+            <div className="flex flex-col items-center gap-4">
+              <DonutChart
+                data={categories.map((c, i) => ({
+                  label: c.category,
+                  value: c.amount,
+                  color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]!,
+                }))}
+              />
+              <div className="flex w-full flex-col gap-1.5">
+                {categories.map((c, i) => (
+                  <div key={c.category} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
                     />
+                    <span className="flex-1 text-foreground">{c.category}</span>
+                    <span className="text-muted-foreground">{formatCurrency(c.amount)}</span>
+                    <span className="w-10 text-right text-muted-foreground/60">{c.percentage.toFixed(1)}%</span>
                   </div>
-                  <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                    {c.percentage.toFixed(1)}%
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      <div className="mb-8 rounded-xl border border-border bg-white p-5 shadow-sm">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">
-          Ingresos vs Gastos (Global)
-        </h3>
-        <div className="flex h-6 w-full overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="flex items-center justify-center bg-emerald-500 text-[10px] font-semibold text-white transition-all"
-            style={{ width: `${Math.max(incomePct, 5)}%` }}
-          >
-            {incomePct >= 12 ? `${Math.round(incomePct)}%` : ""}
-          </div>
-          <div
-            className="flex items-center justify-center bg-red-400 text-[10px] font-semibold text-white transition-all"
-            style={{ width: `${Math.max(expensePct, 5)}%` }}
-          >
-            {expensePct >= 12 ? `${Math.round(expensePct)}%` : ""}
-          </div>
-        </div>
-        <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            Ingresos ({Math.round(incomePct)}%)
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-400" />
-            Gastos ({Math.round(expensePct)}%)
-          </span>
-        </div>
-      </div>
+
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
