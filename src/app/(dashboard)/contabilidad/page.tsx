@@ -6,9 +6,11 @@ import {
   getFinanceSummary,
   getMonthlySummary,
   getExpensesByCategory,
+  getMonthlyRecords,
   type FinanceSummary,
   type MonthlySummary,
   type CategoryBreakdown,
+  type MonthlyDetail,
 } from "@/lib/actions/finance";
 
 const formatCurrency = (amount: number) =>
@@ -75,11 +77,14 @@ export default function ContabilidadPage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
+  const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
 
   useEffect(() => {
     getFinanceSummary().then(setSummary);
     getMonthlySummary().then(setMonthly);
     getExpensesByCategory().then(setCategories);
+    getMonthlyRecords().then(setMonthlyDetails);
   }, []);
 
   if (!summary) {
@@ -225,6 +230,84 @@ export default function ContabilidadPage() {
       </div>
 
 
+
+      <div className="mb-8 rounded-xl border border-border bg-white shadow-sm">
+        <div className="border-b px-5 py-4">
+          <h3 className="text-sm font-semibold text-foreground">Revisión mensual</h3>
+        </div>
+        {monthlyDetails.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted-foreground">
+            No hay registros mensuales aún
+          </div>
+        ) : (
+          <div className="divide-y">
+            {monthlyDetails.map((m) => (
+              <div key={m.month}>
+                <button
+                  onClick={() => setExpandedMonth(expandedMonth === m.month ? null : m.month)}
+                  className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/30"
+                >
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expandedMonth === m.month ? "rotate-90" : ""}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span className="flex-1 text-sm font-medium text-foreground">
+                    {new Date(m.month + "-01").toLocaleDateString("es-ES", { month: "long", year: "numeric" })}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{m.records.length} registros</span>
+                  <span className={`text-xs font-semibold ${m.balance >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    {formatCurrency(m.balance)}
+                  </span>
+                </button>
+                {expandedMonth === m.month && (
+                  <div className="border-t bg-muted/20 px-5 py-3">
+                    <div className="mb-3 grid grid-cols-3 gap-3">
+                      <div className="rounded-lg bg-emerald-50 px-3 py-2 text-center">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
+                        <p className="text-sm font-bold text-emerald-600">{formatCurrency(m.income)}</p>
+                      </div>
+                      <div className="rounded-lg bg-red-50 px-3 py-2 text-center">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
+                        <p className="text-sm font-bold text-red-500">{formatCurrency(m.expenses)}</p>
+                      </div>
+                      <div className={`rounded-lg px-3 py-2 text-center ${m.balance >= 0 ? "bg-blue-50" : "bg-red-50"}`}>
+                        <p className={`text-[10px] font-medium uppercase tracking-wider ${m.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>Balance</p>
+                        <p className={`text-sm font-bold ${m.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(m.balance)}</p>
+                      </div>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          <th className="py-2 pr-2">Fecha</th>
+                          <th className="py-2 pr-2">Descripción</th>
+                          <th className="py-2 pr-2">Categoría</th>
+                          <th className="py-2 text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {m.records.map((r) => (
+                          <tr key={r.id} className="border-b last:border-0">
+                            <td className="py-1.5 pr-2 text-muted-foreground">
+                              {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
+                            </td>
+                            <td className="py-1.5 pr-2 font-medium text-foreground">{r.description}</td>
+                            <td className="py-1.5 pr-2 text-muted-foreground">{r.category || "—"}</td>
+                            <td className={`py-1.5 text-right font-medium ${r.type === "income" ? "text-emerald-600" : "text-red-500"}`}>
+                              {r.type === "income" ? "+" : "-"}{formatCurrency(r.amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link

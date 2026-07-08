@@ -43,6 +43,23 @@ export type MonthlySummary = {
   expenses: number;
 };
 
+export type MonthlyRecord = {
+  id: string;
+  type: string;
+  amount: number;
+  description: string;
+  category: string | null;
+  date: Date;
+};
+
+export type MonthlyDetail = {
+  month: string;
+  income: number;
+  expenses: number;
+  balance: number;
+  records: MonthlyRecord[];
+};
+
 export type CategoryBreakdown = {
   category: string;
   amount: number;
@@ -73,6 +90,36 @@ export async function getMonthlySummary(): Promise<MonthlySummary[]> {
       month,
       income: data.income,
       expenses: data.expenses,
+    }));
+}
+
+export async function getMonthlyRecords(): Promise<MonthlyDetail[]> {
+  const session = await getSession();
+  if (!session) return [];
+
+  const records = await db.financeRecord.findMany({
+    where: { userId: session.id },
+    orderBy: { date: "desc" },
+    select: { id: true, type: true, amount: true, description: true, category: true, date: true },
+  });
+
+  const grouped: Record<string, MonthlyDetail> = {};
+
+  for (const r of records) {
+    const key = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, "0")}`;
+    if (!grouped[key]) {
+      grouped[key] = { month: key, income: 0, expenses: 0, balance: 0, records: [] };
+    }
+    if (r.type === "income") grouped[key].income += r.amount;
+    else if (r.type === "expense") grouped[key].expenses += r.amount;
+    grouped[key].records.push(r);
+  }
+
+  return Object.entries(grouped)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([_, detail]) => ({
+      ...detail,
+      balance: detail.income - detail.expenses,
     }));
 }
 
