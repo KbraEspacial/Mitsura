@@ -37,6 +37,72 @@ export type DebtData = {
   notes?: string;
 };
 
+export type MonthlySummary = {
+  month: string;
+  income: number;
+  expenses: number;
+};
+
+export type CategoryBreakdown = {
+  category: string;
+  amount: number;
+  percentage: number;
+};
+
+export async function getMonthlySummary(): Promise<MonthlySummary[]> {
+  const session = await getSession();
+  if (!session) return [];
+
+  const records = await db.financeRecord.findMany({
+    where: { userId: session.id },
+    select: { type: true, amount: true, date: true },
+  });
+
+  const monthlyMap: Record<string, { income: number; expenses: number }> = {};
+
+  for (const r of records) {
+    const key = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, "0")}`;
+    if (!monthlyMap[key]) monthlyMap[key] = { income: 0, expenses: 0 };
+    if (r.type === "income") monthlyMap[key].income += r.amount;
+    else if (r.type === "expense") monthlyMap[key].expenses += r.amount;
+  }
+
+  return Object.entries(monthlyMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, data]) => ({
+      month,
+      income: data.income,
+      expenses: data.expenses,
+    }));
+}
+
+export async function getExpensesByCategory(): Promise<CategoryBreakdown[]> {
+  const session = await getSession();
+  if (!session) return [];
+
+  const expenses = await db.financeRecord.findMany({
+    where: { userId: session.id, type: "expense" },
+    select: { category: true, amount: true },
+  });
+
+  const categoryMap: Record<string, number> = {};
+
+  for (const e of expenses) {
+    const cat = e.category || "Sin categoría";
+    categoryMap[cat] = (categoryMap[cat] ?? 0) + e.amount;
+  }
+
+  const total = Object.values(categoryMap).reduce((sum, a) => sum + a, 0);
+
+  return Object.entries(categoryMap)
+    .sort(([, a], [, b]) => b - a)
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: total > 0 ? (amount / total) * 100 : 0,
+    }));
+}
+
 export async function getFinanceSummary(): Promise<FinanceSummary> {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
