@@ -78,13 +78,16 @@ export default function ContabilidadPage() {
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
-  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   useEffect(() => {
     getFinanceSummary().then(setSummary);
     getMonthlySummary().then(setMonthly);
     getExpensesByCategory().then(setCategories);
-    getMonthlyRecords().then(setMonthlyDetails);
+    getMonthlyRecords().then((data) => {
+      setMonthlyDetails(data);
+      if (data.length > 0 && !selectedMonth) setSelectedMonth(data[0]!.month);
+    });
   }, []);
 
   if (!summary) {
@@ -100,49 +103,77 @@ export default function ContabilidadPage() {
     1,
   );
 
+  const activeDetail = monthlyDetails.find((m) => m.month === selectedMonth);
+
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold tracking-tight">Resumen financiero</h2>
 
+      {/* Summary cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Total Ingresos
-          </p>
-          <p className="mt-1.5 text-2xl font-bold text-emerald-600">
-            {formatCurrency(summary.totalIncome)}
-          </p>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Ingresos
+            </p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-600">
+              {formatCurrency(summary.totalIncome)}
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Total Gastos
-          </p>
-          <p className="mt-1.5 text-2xl font-bold text-red-500">
-            {formatCurrency(summary.totalExpenses)}
-          </p>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-100 text-red-500">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Gastos
+            </p>
+            <p className="mt-0.5 text-xl font-bold text-red-500">
+              {formatCurrency(summary.totalExpenses)}
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Balance
-          </p>
-          <p
-            className={`mt-1.5 text-2xl font-bold ${
-              summary.balance >= 0 ? "text-blue-600" : "text-red-500"
-            }`}
-          >
-            {formatCurrency(summary.balance)}
-          </p>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${summary.balance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Balance
+            </p>
+            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>
+              {formatCurrency(summary.balance)}
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Deudas Activas
-          </p>
-          <p className="mt-1.5 text-2xl font-bold text-amber-600">
-            {summary.activeDebtsCount}
-          </p>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Deudas activas
+            </p>
+            <p className="mt-0.5 text-xl font-bold text-amber-600">
+              {summary.activeDebtsCount}
+            </p>
+          </div>
         </div>
       </div>
 
+      {/* Charts row */}
       <div className="mb-8 grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-foreground">
@@ -153,15 +184,16 @@ export default function ContabilidadPage() {
               No hay registros mensuales aún
             </p>
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-5">
               {monthly.map((m) => {
-                const max = maxMonthly;
+                const iw = (m.income / maxMonthly) * 100;
+                const ew = (m.expenses / maxMonthly) * 100;
                 return (
                   <div key={m.month}>
                     <div className="mb-1.5 flex items-center justify-between text-xs">
                       <span className="font-semibold text-foreground">
                         {new Date(m.month + "-01").toLocaleDateString("es-ES", {
-                          month: "long",
+                          month: "short",
                           year: "numeric",
                         })}
                       </span>
@@ -173,19 +205,25 @@ export default function ContabilidadPage() {
                         {formatCurrency(m.income - m.expenses)}
                       </span>
                     </div>
-                    <div className="relative h-7 w-full rounded-lg bg-gray-100">
-                      <div
-                        className="absolute left-0 top-0 h-full rounded-l-lg bg-emerald-400 transition-all"
-                        style={{ width: `${(m.income / max) * 100}%` }}
-                      />
-                      <div
-                        className="absolute right-0 top-0 h-full rounded-r-lg bg-red-400 transition-all"
-                        style={{ width: `${(m.expenses / max) * 100}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                      <span className="text-emerald-600">{formatCurrency(m.income)}</span>
-                      <span className="text-red-500">{formatCurrency(m.expenses)}</span>
+                    <div className="flex gap-0.5">
+                      <div className="flex-1">
+                        <div className="relative h-6 w-full rounded-md bg-gray-100">
+                          <div
+                            className="h-full rounded-md bg-emerald-400 transition-all"
+                            style={{ width: `${iw}%` }}
+                          />
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-emerald-600">{formatCurrency(m.income)}</p>
+                      </div>
+                      <div className="flex-1">
+                        <div className="relative h-6 w-full rounded-md bg-gray-100">
+                          <div
+                            className="h-full rounded-md bg-red-400 transition-all"
+                            style={{ width: `${ew}%` }}
+                          />
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-red-500">{formatCurrency(m.expenses)}</p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -229,8 +267,7 @@ export default function ContabilidadPage() {
         </div>
       </div>
 
-
-
+      {/* Monthly review - selector + detail */}
       <div className="mb-8 rounded-xl border border-border bg-white shadow-sm">
         <div className="border-b px-5 py-4">
           <h3 className="text-sm font-semibold text-foreground">Revisión mensual</h3>
@@ -240,75 +277,91 @@ export default function ContabilidadPage() {
             No hay registros mensuales aún
           </div>
         ) : (
-          <div className="divide-y">
-            {monthlyDetails.map((m) => (
-              <div key={m.month}>
-                <button
-                  onClick={() => setExpandedMonth(expandedMonth === m.month ? null : m.month)}
-                  className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/30"
-                >
-                  <svg
-                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expandedMonth === m.month ? "rotate-90" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          <>
+            {/* Month selector pills */}
+            <div className="flex flex-wrap gap-2 border-b px-5 py-3">
+              {monthlyDetails.map((m) => {
+                const active = m.month === selectedMonth;
+                return (
+                  <button
+                    key={m.month}
+                    onClick={() => setSelectedMonth(m.month)}
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "bg-gray-100 text-muted-foreground hover:bg-gray-200"
+                    }`}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span className="flex-1 text-sm font-medium text-foreground">
-                    {new Date(m.month + "-01").toLocaleDateString("es-ES", { month: "long", year: "numeric" })}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{m.records.length} registros</span>
-                  <span className={`text-xs font-semibold ${m.balance >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                    {formatCurrency(m.balance)}
-                  </span>
-                </button>
-                {expandedMonth === m.month && (
-                  <div className="border-t bg-muted/20 px-5 py-3">
-                    <div className="mb-3 grid grid-cols-3 gap-3">
-                      <div className="rounded-lg bg-emerald-50 px-3 py-2 text-center">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
-                        <p className="text-sm font-bold text-emerald-600">{formatCurrency(m.income)}</p>
-                      </div>
-                      <div className="rounded-lg bg-red-50 px-3 py-2 text-center">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
-                        <p className="text-sm font-bold text-red-500">{formatCurrency(m.expenses)}</p>
-                      </div>
-                      <div className={`rounded-lg px-3 py-2 text-center ${m.balance >= 0 ? "bg-blue-50" : "bg-red-50"}`}>
-                        <p className={`text-[10px] font-medium uppercase tracking-wider ${m.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>Balance</p>
-                        <p className={`text-sm font-bold ${m.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(m.balance)}</p>
-                      </div>
-                    </div>
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          <th className="py-2 pr-2">Fecha</th>
-                          <th className="py-2 pr-2">Descripción</th>
-                          <th className="py-2 pr-2">Categoría</th>
-                          <th className="py-2 text-right">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {m.records.map((r) => (
-                          <tr key={r.id} className="border-b last:border-0">
-                            <td className="py-1.5 pr-2 text-muted-foreground">
-                              {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
-                            </td>
-                            <td className="py-1.5 pr-2 font-medium text-foreground">{r.description}</td>
-                            <td className="py-1.5 pr-2 text-muted-foreground">{r.category || "—"}</td>
-                            <td className={`py-1.5 text-right font-medium ${r.type === "income" ? "text-emerald-600" : "text-red-500"}`}>
-                              {r.type === "income" ? "+" : "-"}{formatCurrency(r.amount)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    {new Date(m.month + "-01").toLocaleDateString("es-ES", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected month detail */}
+            {activeDetail && (
+              <div className="p-5">
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
+                    <p className="mt-0.5 text-lg font-bold text-emerald-600">{formatCurrency(activeDetail.income)}</p>
                   </div>
-                )}
+                  <div className="rounded-lg border border-red-200 bg-red-50/50 px-4 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
+                    <p className="mt-0.5 text-lg font-bold text-red-500">{formatCurrency(activeDetail.expenses)}</p>
+                  </div>
+                  <div className={`rounded-lg border px-4 py-3 ${
+                    activeDetail.balance >= 0
+                      ? "border-blue-200 bg-blue-50/50"
+                      : "border-red-200 bg-red-50/50"
+                  }`}>
+                    <p className={`text-[10px] font-medium uppercase tracking-wider ${
+                      activeDetail.balance >= 0 ? "text-blue-600" : "text-red-500"
+                    }`}>Balance</p>
+                    <p className={`mt-0.5 text-lg font-bold ${
+                      activeDetail.balance >= 0 ? "text-blue-600" : "text-red-500"
+                    }`}>{formatCurrency(activeDetail.balance)}</p>
+                  </div>
+                </div>
+
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <th className="py-2 pr-3">Fecha</th>
+                      <th className="py-2 pr-3">Descripción</th>
+                      <th className="py-2 pr-3">Categoría</th>
+                      <th className="py-2 text-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeDetail.records.map((r) => (
+                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="py-2 pr-3 text-muted-foreground">
+                          {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
+                        </td>
+                        <td className="py-2 pr-3 font-medium text-foreground">{r.description}</td>
+                        <td className="py-2 pr-3 text-muted-foreground">
+                          <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {r.category || "—"}
+                          </span>
+                        </td>
+                        <td className={`py-2 text-right font-medium ${r.type === "income" ? "text-emerald-600" : "text-red-500"}`}>
+                          {r.type === "income" ? "+" : "-"}{formatCurrency(r.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
+      {/* Quick links */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/contabilidad/ingresos"
