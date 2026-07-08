@@ -20,11 +20,9 @@ type TaskDef = {
 export function TaskCard({
   task,
   onClick,
-  onDelete,
 }: {
   task: TaskDef;
-  onClick: (t: TaskDef | null) => void;
-  onDelete: (id: string) => void;
+  onClick: (t: TaskDef) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -63,18 +61,6 @@ export function TaskCard({
             </p>
           )}
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(task.id);
-          }}
-          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-          title="Eliminar tarea"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3">

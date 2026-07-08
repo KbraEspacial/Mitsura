@@ -126,6 +126,11 @@ export function BoardKanban({
     await deleteTask(id);
   };
 
+  const handleTaskModalDelete = async (taskId: string) => {
+    await handleDeleteTask(taskId);
+    setModalTask(null);
+  };
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
@@ -213,7 +218,6 @@ export function BoardKanban({
                           key={task.id}
                           task={task}
                           onClick={(t) => setModalTask(t)}
-                          onDelete={handleDeleteTask}
                         />
                       ))}
                     </div>
@@ -241,6 +245,7 @@ export function BoardKanban({
           members={members.map((m) => ({ id: m.userId, name: m.name, email: m.email }))}
           onClose={() => setModalTask(null)}
           onUpdate={handleUpdateTask}
+          onDelete={handleTaskModalDelete}
         />
       )}
 
