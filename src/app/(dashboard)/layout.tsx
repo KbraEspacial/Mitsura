@@ -1,13 +1,10 @@
-import { getSession, clearSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Sidebar from "./sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session) {
-    await clearSession();
-    redirect("/login");
-  }
+  if (!session) redirect("/login");
 
   return (
     <div className="flex h-screen bg-neutral-50">
