@@ -5,12 +5,12 @@ import Link from "next/link";
 import {
   getFinanceSummary,
   getMonthlySummary,
-  getExpensesByCategory,
   getMonthlyRecords,
+  getExpensesByCategory,
   type FinanceSummary,
   type MonthlySummary,
-  type CategoryBreakdown,
   type MonthlyDetail,
+  type CategoryBreakdown,
 } from "@/lib/actions/finance";
 
 const formatCurrency = (amount: number) =>
@@ -22,73 +22,30 @@ const CATEGORY_COLORS = [
   "#06b6d4", "#d946ef", "#e11d48", "#0ea5e9", "#65a30d",
 ];
 
-function DonutChart({ data }: { data: { label: string; value: number; color: string }[] }) {
-  const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return null;
-
-  const cx = 120;
-  const cy = 120;
-  const r = 90;
-  const strokeW = 28;
-
-  let currentAngle = -90;
-
-  const slices = data.map((d) => {
-    const pct = d.value / total;
-    const angle = pct * 360;
-    const start = currentAngle;
-    const end = currentAngle + angle;
-    currentAngle = end;
-
-    const sr = ((start * Math.PI) / 180);
-    const er = ((end * Math.PI) / 180);
-    const x1 = cx + r * Math.cos(sr);
-    const y1 = cy + r * Math.sin(sr);
-    const x2 = cx + r * Math.cos(er);
-    const y2 = cy + r * Math.sin(er);
-    const large = angle > 180 ? 1 : 0;
-
-    return {
-      path: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`,
-      color: d.color,
-      label: d.label,
-      value: d.value,
-      pct,
-    };
-  });
-
-  return (
-    <svg viewBox="0 0 240 240" className="h-48 w-48">
-      {slices.map((s, i) => (
-        <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={strokeW} strokeLinecap="butt" />
-      ))}
-      <circle cx={cx} cy={cy} r={r - strokeW / 2} fill="white" />
-      <text x={cx} y={cy - 6} textAnchor="middle" className="text-lg font-bold" fill="currentColor">
-        {data.length}
-      </text>
-      <text x={cx} y={cy + 12} textAnchor="middle" className="text-[10px]" fill="#6b7280">
-        conceptos
-      </text>
-    </svg>
-  );
-}
-
 export default function ContabilidadPage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [queryMonth, setQueryMonth] = useState("");
+  const [queryResult, setQueryResult] = useState<{ income: number; expenses: number } | null>(null);
 
   useEffect(() => {
     getFinanceSummary().then(setSummary);
     getMonthlySummary().then(setMonthly);
+    getMonthlyRecords().then(setMonthlyDetails);
     getExpensesByCategory().then(setCategories);
-    getMonthlyRecords().then((data) => {
-      setMonthlyDetails(data);
-      if (data.length > 0 && !selectedMonth) setSelectedMonth(data[0]!.month);
-    });
   }, []);
+
+  const handleQueryMonth = () => {
+    if (!queryMonth) return;
+    const detail = monthlyDetails.find((m) => m.month === queryMonth);
+    if (detail) {
+      setQueryResult({ income: detail.income, expenses: detail.expenses });
+    } else {
+      setQueryResult({ income: 0, expenses: 0 });
+    }
+  };
 
   if (!summary) {
     return (
@@ -103,14 +60,12 @@ export default function ContabilidadPage() {
     1,
   );
 
-  const activeDetail = monthlyDetails.find((m) => m.month === selectedMonth);
-
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold tracking-tight">Resumen financiero</h2>
 
       {/* Summary cards */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -118,12 +73,8 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Ingresos
-            </p>
-            <p className="mt-0.5 text-xl font-bold text-emerald-600">
-              {formatCurrency(summary.totalIncome)}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Ingresos</p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(summary.totalIncome)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
@@ -133,12 +84,8 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Gastos
-            </p>
-            <p className="mt-0.5 text-xl font-bold text-red-500">
-              {formatCurrency(summary.totalExpenses)}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Gastos</p>
+            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(summary.totalExpenses)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
@@ -148,12 +95,8 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Balance
-            </p>
-            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>
-              {formatCurrency(summary.balance)}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Balance</p>
+            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(summary.balance)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
@@ -163,13 +106,43 @@ export default function ContabilidadPage() {
             </svg>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Deudas activas
-            </p>
-            <p className="mt-0.5 text-xl font-bold text-amber-600">
-              {summary.activeDebtsCount}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Deudas</p>
+            <p className="mt-0.5 text-xl font-bold text-amber-600">{summary.activeDebtsCount}</p>
           </div>
+        </div>
+        {/* Month query card */}
+        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Consulta por mes
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="month"
+              value={queryMonth}
+              onChange={(e) => { setQueryMonth(e.target.value); setQueryResult(null); }}
+              className="block w-full rounded-lg border border-border bg-gray-50 px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              onClick={handleQueryMonth}
+              disabled={!queryMonth}
+              className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            >
+              Ver
+            </button>
+          </div>
+          {queryResult && (
+            <div className="mt-2 flex gap-3 border-t pt-2 text-xs">
+              <div>
+                <span className="text-emerald-600">+{formatCurrency(queryResult.income)}</span>
+              </div>
+              <div>
+                <span className="text-red-500">-{formatCurrency(queryResult.expenses)}</span>
+              </div>
+              <div className={`font-semibold ${queryResult.income - queryResult.expenses >= 0 ? "text-blue-600" : "text-red-500"}`}>
+                = {formatCurrency(queryResult.income - queryResult.expenses)}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -180,9 +153,7 @@ export default function ContabilidadPage() {
             Ingresos vs Gastos por Mes
           </h3>
           {monthly.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No hay registros mensuales aún
-            </p>
+            <p className="text-xs text-muted-foreground">No hay registros mensuales aún</p>
           ) : (
             <div className="flex flex-col gap-5">
               {monthly.map((m) => {
@@ -197,30 +168,20 @@ export default function ContabilidadPage() {
                           year: "numeric",
                         })}
                       </span>
-                      <span className={
-                        m.income - m.expenses >= 0
-                          ? "font-medium text-emerald-600"
-                          : "font-medium text-red-500"
-                      }>
+                      <span className={m.income - m.expenses >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-500"}>
                         {formatCurrency(m.income - m.expenses)}
                       </span>
                     </div>
                     <div className="flex gap-0.5">
                       <div className="flex-1">
                         <div className="relative h-6 w-full rounded-md bg-gray-100">
-                          <div
-                            className="h-full rounded-md bg-emerald-400 transition-all"
-                            style={{ width: `${iw}%` }}
-                          />
+                          <div className="h-full rounded-md bg-emerald-400 transition-all" style={{ width: `${iw}%` }} />
                         </div>
                         <p className="mt-0.5 text-[11px] text-emerald-600">{formatCurrency(m.income)}</p>
                       </div>
                       <div className="flex-1">
                         <div className="relative h-6 w-full rounded-md bg-gray-100">
-                          <div
-                            className="h-full rounded-md bg-red-400 transition-all"
-                            style={{ width: `${ew}%` }}
-                          />
+                          <div className="h-full rounded-md bg-red-400 transition-all" style={{ width: `${ew}%` }} />
                         </div>
                         <p className="mt-0.5 text-[11px] text-red-500">{formatCurrency(m.expenses)}</p>
                       </div>
@@ -237,128 +198,38 @@ export default function ContabilidadPage() {
             Gastos por Concepto
           </h3>
           {categories.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No hay gastos registrados aún
-            </p>
+            <p className="text-xs text-muted-foreground">No hay gastos registrados aún</p>
           ) : (
-            <div className="flex flex-col items-center gap-4">
-              <DonutChart
-                data={categories.map((c, i) => ({
-                  label: c.category,
-                  value: c.amount,
-                  color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]!,
-                }))}
-              />
-              <div className="flex w-full flex-col gap-1.5">
-                {categories.map((c, i) => (
-                  <div key={c.category} className="flex items-center gap-2 text-xs">
-                    <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
-                    />
-                    <span className="flex-1 text-foreground">{c.category}</span>
-                    <span className="text-muted-foreground">{formatCurrency(c.amount)}</span>
-                    <span className="w-10 text-right text-muted-foreground/60">{c.percentage.toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Monthly review - selector + detail */}
-      <div className="mb-8 rounded-xl border border-border bg-white shadow-sm">
-        <div className="border-b px-5 py-4">
-          <h3 className="text-sm font-semibold text-foreground">Revisión mensual</h3>
-        </div>
-        {monthlyDetails.length === 0 ? (
-          <div className="px-5 py-8 text-center text-xs text-muted-foreground">
-            No hay registros mensuales aún
-          </div>
-        ) : (
-          <>
-            {/* Month selector pills */}
-            <div className="flex flex-wrap gap-2 border-b px-5 py-3">
-              {monthlyDetails.map((m) => {
-                const active = m.month === selectedMonth;
+            <div className="flex flex-col gap-3">
+              {categories.map((c, i) => {
+                const maxCat = categories[0]!.amount || 1;
+                const w = (c.amount / maxCat) * 100;
                 return (
-                  <button
-                    key={m.month}
-                    onClick={() => setSelectedMonth(m.month)}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                      active
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-gray-100 text-muted-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {new Date(m.month + "-01").toLocaleDateString("es-ES", {
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </button>
+                  <div key={c.category}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                        />
+                        <span className="font-medium text-foreground">{c.category}</span>
+                      </div>
+                      <span className="text-muted-foreground">
+                        {formatCurrency(c.amount)} <span className="text-muted-foreground/50">({c.percentage.toFixed(1)}%)</span>
+                      </span>
+                    </div>
+                    <div className="h-5 w-full rounded-md bg-gray-100">
+                      <div
+                        className="h-full rounded-md transition-all"
+                        style={{ width: `${w}%`, backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>
-
-            {/* Selected month detail */}
-            {activeDetail && (
-              <div className="p-5">
-                <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
-                    <p className="mt-0.5 text-lg font-bold text-emerald-600">{formatCurrency(activeDetail.income)}</p>
-                  </div>
-                  <div className="rounded-lg border border-red-200 bg-red-50/50 px-4 py-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
-                    <p className="mt-0.5 text-lg font-bold text-red-500">{formatCurrency(activeDetail.expenses)}</p>
-                  </div>
-                  <div className={`rounded-lg border px-4 py-3 ${
-                    activeDetail.balance >= 0
-                      ? "border-blue-200 bg-blue-50/50"
-                      : "border-red-200 bg-red-50/50"
-                  }`}>
-                    <p className={`text-[10px] font-medium uppercase tracking-wider ${
-                      activeDetail.balance >= 0 ? "text-blue-600" : "text-red-500"
-                    }`}>Balance</p>
-                    <p className={`mt-0.5 text-lg font-bold ${
-                      activeDetail.balance >= 0 ? "text-blue-600" : "text-red-500"
-                    }`}>{formatCurrency(activeDetail.balance)}</p>
-                  </div>
-                </div>
-
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <th className="py-2 pr-3">Fecha</th>
-                      <th className="py-2 pr-3">Descripción</th>
-                      <th className="py-2 pr-3">Categoría</th>
-                      <th className="py-2 text-right">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDetail.records.map((r) => (
-                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="py-2 pr-3 text-muted-foreground">
-                          {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
-                        </td>
-                        <td className="py-2 pr-3 font-medium text-foreground">{r.description}</td>
-                        <td className="py-2 pr-3 text-muted-foreground">
-                          <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            {r.category || "—"}
-                          </span>
-                        </td>
-                        <td className={`py-2 text-right font-medium ${r.type === "income" ? "text-emerald-600" : "text-red-500"}`}>
-                          {r.type === "income" ? "+" : "-"}{formatCurrency(r.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Quick links */}
@@ -368,45 +239,42 @@ export default function ContabilidadPage() {
           className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-emerald-50/40"
         >
           <p className="text-sm font-medium text-foreground">Gestionar ingresos</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Añade y revisa tus ingresos
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Añade y revisa tus ingresos</p>
         </Link>
         <Link
           href="/contabilidad/gastos"
           className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-red-50/40"
         >
           <p className="text-sm font-medium text-foreground">Gestionar gastos</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Controla tus gastos diarios
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Controla tus gastos diarios</p>
         </Link>
         <Link
           href="/contabilidad/gastos-fijos"
           className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-blue-50/40"
         >
           <p className="text-sm font-medium text-foreground">Gastos fijos</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Administra tus suscripciones y facturas
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Administra tus suscripciones y facturas</p>
         </Link>
         <Link
           href="/contabilidad/deudas"
           className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-amber-50/40"
         >
           <p className="text-sm font-medium text-foreground">Deudas</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Haz seguimiento de tus deudas
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Haz seguimiento de tus deudas</p>
+        </Link>
+        <Link
+          href="/contabilidad/revision-mensual"
+          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-indigo-50/40"
+        >
+          <p className="text-sm font-medium text-foreground">Revisión mensual</p>
+          <p className="mt-1 text-xs text-muted-foreground">Ingresos y gastos detallados por mes</p>
         </Link>
         <Link
           href="/contabilidad/ia"
           className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-purple-50/40"
         >
           <p className="text-sm font-medium text-foreground">Asistente IA</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Recibe consejos financieros personalizados
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Recibe consejos financieros personalizados</p>
         </Link>
       </div>
     </div>
