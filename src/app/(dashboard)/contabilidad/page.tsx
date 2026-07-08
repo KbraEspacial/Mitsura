@@ -27,8 +27,8 @@ export default function ContabilidadPage() {
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
-  const [queryMonth, setQueryMonth] = useState("");
-  const [queryResult, setQueryResult] = useState<{ income: number; expenses: number } | null>(null);
+  const [queryMonth, setQueryMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [queryResult, setQueryResult] = useState<{ income: number; expenses: number; balance: number } | null>(null);
 
   useEffect(() => {
     getFinanceSummary().then(setSummary);
@@ -37,15 +37,14 @@ export default function ContabilidadPage() {
     getExpensesByCategory().then(setCategories);
   }, []);
 
-  const handleQueryMonth = () => {
-    if (!queryMonth) return;
+  useEffect(() => {
     const detail = monthlyDetails.find((m) => m.month === queryMonth);
     if (detail) {
-      setQueryResult({ income: detail.income, expenses: detail.expenses });
+      setQueryResult({ income: detail.income, expenses: detail.expenses, balance: detail.balance });
     } else {
-      setQueryResult({ income: 0, expenses: 0 });
+      setQueryResult({ income: 0, expenses: 0, balance: 0 });
     }
-  };
+  }, [queryMonth, monthlyDetails]);
 
   if (!summary) {
     return (
@@ -111,38 +110,36 @@ export default function ContabilidadPage() {
           </div>
         </div>
         {/* Month query card */}
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Consulta por mes
-          </p>
-          <div className="flex gap-2">
+        <div className="rounded-xl border border-blue-200 bg-white p-5 shadow-sm ring-1 ring-blue-100">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wider text-blue-600">
+              {queryMonth
+                ? new Date(queryMonth + "-01").toLocaleDateString("es-ES", { month: "long", year: "numeric" })
+                : "Consulta por mes"}
+            </p>
             <input
               type="month"
               value={queryMonth}
-              onChange={(e) => { setQueryMonth(e.target.value); setQueryResult(null); }}
-              className="block w-full rounded-lg border border-border bg-gray-50 px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              onChange={(e) => setQueryMonth(e.target.value)}
+              className="w-36 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
-            <button
-              onClick={handleQueryMonth}
-              disabled={!queryMonth}
-              className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
-            >
-              Ver
-            </button>
           </div>
-          {queryResult && (
-            <div className="mt-2 flex gap-3 border-t pt-2 text-xs">
-              <div>
-                <span className="text-emerald-600">+{formatCurrency(queryResult.income)}</span>
-              </div>
-              <div>
-                <span className="text-red-500">-{formatCurrency(queryResult.expenses)}</span>
-              </div>
-              <div className={`font-semibold ${queryResult.income - queryResult.expenses >= 0 ? "text-blue-600" : "text-red-500"}`}>
-                = {formatCurrency(queryResult.income - queryResult.expenses)}
-              </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-blue-100 pt-3 text-center text-xs">
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
+              <p className="mt-0.5 text-sm font-bold text-emerald-600">{formatCurrency(queryResult?.income ?? 0)}</p>
             </div>
-          )}
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
+              <p className="mt-0.5 text-sm font-bold text-red-500">{formatCurrency(queryResult?.expenses ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Balance</p>
+              <p className={`mt-0.5 text-sm font-bold ${(queryResult?.balance ?? 0) >= 0 ? "text-blue-600" : "text-red-500"}`}>
+                {formatCurrency(queryResult?.balance ?? 0)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
