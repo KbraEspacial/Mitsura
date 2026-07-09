@@ -15,6 +15,7 @@ type TaskDef = {
   assignee: { id: string; name: string; image?: string | null } | null;
   statusOrder: number;
   commentCount: number;
+  archived?: boolean;
 };
 
 export function TaskCard({
@@ -50,8 +51,22 @@ export function TaskCard({
       {...attributes}
       {...listeners}
       onClick={() => onClick(task)}
-      className="group cursor-grab rounded-lg border border-border bg-white text-sm shadow-sm transition-all hover:shadow-md hover:border-blue-200 active:cursor-grabbing"
+      className={`group cursor-grab rounded-lg border text-sm shadow-sm transition-all hover:shadow-md active:cursor-grabbing ${
+        task.archived
+          ? "border-dashed border-muted-foreground/30 bg-muted/20 opacity-60 hover:opacity-80"
+          : "border-border bg-background hover:border-blue-200"
+      }`}
     >
+      {task.archived && (
+        <div className="px-3 pt-2">
+          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Archivada
+          </span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2 p-3 pb-2">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground leading-snug">{task.title}</p>

@@ -21,7 +21,7 @@ export default function ContabilidadLayout({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center gap-1 rounded-lg border border-border bg-white p-1 shadow-sm">
+      <div className="mb-6 flex flex-wrap items-center gap-1 rounded-lg border border-border bg-background p-1 shadow-sm">
         {tabs.map((tab) => {
           const isActive = pathname === tab.href;
           return (

@@ -121,6 +121,24 @@ export async function reorderTasks(tasks: { id: string; order: number; columnId:
   await db.$transaction(tx);
 }
 
+export async function archiveTask(taskId: string) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+  await db.task.update({ where: { id: taskId }, data: { archived: true } });
+}
+
+export async function restoreTask(taskId: string) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+  await db.task.update({ where: { id: taskId }, data: { archived: false } });
+}
+
+export async function getArchivedCount(boardId: string): Promise<number> {
+  const session = await getSession();
+  if (!session) return 0;
+  return db.task.count({ where: { boardId, archived: true } });
+}
+
 export async function deleteTask(taskId: string) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");

@@ -20,6 +20,7 @@ export default async function BoardPage({ params }: { params: Promise<{ boardId:
           dueDate: t.dueDate?.toISOString() ?? null,
           statusOrder: col?.order ?? 0,
           commentCount: t._count?.comments ?? 0,
+          archived: t.archived,
         };
       })}
       members={members}

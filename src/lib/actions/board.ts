@@ -123,6 +123,16 @@ export async function removeBoardMember(boardId: string, memberRecordId: string)
   return { success: true };
 }
 
+export async function reorderColumns(columns: { id: string; order: number }[]) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+
+  const tx = columns.map((c) =>
+    db.column.update({ where: { id: c.id }, data: { order: c.order } }),
+  );
+  await db.$transaction(tx);
+}
+
 export async function deleteBoard(boardId: string) {
   const session = await getSession();
   if (!session) return;

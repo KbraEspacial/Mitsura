@@ -222,6 +222,19 @@ export async function createFinanceRecord(data: FinanceRecordData) {
   });
 }
 
+export async function updateFinanceRecord(
+  id: string,
+  data: { amount?: number; description?: string; category?: string | null; date?: Date },
+) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+
+  await db.financeRecord.updateMany({
+    where: { id, userId: session.id },
+    data,
+  });
+}
+
 export async function deleteFinanceRecord(id: string) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
@@ -229,6 +242,45 @@ export async function deleteFinanceRecord(id: string) {
   await db.financeRecord.deleteMany({
     where: { id, userId: session.id },
   });
+}
+
+export type CategoryInfo = { name: string; count: number };
+
+export async function getCategories(): Promise<CategoryInfo[]> {
+  const session = await getSession();
+  if (!session) return [];
+  const records = await db.financeRecord.findMany({
+    where: { userId: session.id },
+    select: { category: true, type: true },
+  });
+  const map: Record<string, number> = {};
+  for (const r of records) {
+    const cat = r.category || "Sin categoría";
+    map[cat] = (map[cat] ?? 0) + 1;
+  }
+  return Object.entries(map)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export async function exportFinanceToCSV(type?: string): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+  const records = await db.financeRecord.findMany({
+    where: {
+      userId: session.id,
+      ...(type ? { type } : {}),
+    },
+    orderBy: { date: "desc" },
+  });
+  const header = "Fecha,Tipo,Descripción,Categoría,Importe\n";
+  const rows = records
+    .map(
+      (r) =>
+        `${r.date.toISOString().split("T")[0]},${r.type},"${r.description.replace(/"/g, '""')}",${r.category ?? ""},${r.amount}`,
+    )
+    .join("\n");
+  return header + rows;
 }
 
 export async function getFixedExpenses() {

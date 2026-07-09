@@ -16,6 +16,7 @@ type TaskData = {
   assignee: { id: string; name: string; image?: string | null } | null;
   statusOrder: number;
   commentCount: number;
+  archived?: boolean;
 };
 
 const PRIORITIES = ["crítica", "alta", "media", "baja"];
@@ -32,12 +33,14 @@ export function TaskModal({
   onClose,
   onUpdate,
   onDelete,
+  onArchive,
 }: {
   task: TaskData;
   members: Member[];
   onClose: () => void;
   onUpdate: (t: TaskData) => void;
   onDelete?: (taskId: string) => void;
+  onArchive?: (taskId: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -149,11 +152,32 @@ export function TaskModal({
           <div className="flex items-center justify-between border-b px-5 py-4">
             <h2 className="text-base font-semibold text-foreground">Detalle de tarea</h2>
             <div className="flex items-center gap-2">
+              {onArchive && (
+                <button
+                  onClick={() => onArchive(task.id)}
+                  className={`rounded-lg p-1.5 transition-colors ${
+                    task.archived
+                      ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                      : "text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
+                  }`}
+                  title={task.archived ? "Restaurar tarea" : "Archivar tarea"}
+                >
+                  {task.archived ? (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                  )}
+                </button>
+              )}
               {onDelete && !confirmDelete && (
                 <button
                   onClick={() => setConfirmDelete(true)}
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
-                  title="Eliminar tarea"
+                  title="Eliminar permanentemente"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -363,7 +387,7 @@ export function TaskModal({
 
       {confirmDelete ? (
         <div className="absolute bottom-12 right-12 flex items-center gap-2">
-          <span className="text-xs font-medium text-red-500">¿Eliminar tarea?</span>
+          <span className="text-xs font-medium text-red-500">¿Eliminar permanentemente?</span>
           <button
             onClick={() => { onDelete?.(task.id); setConfirmDelete(false); }}
             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors shadow-lg"
