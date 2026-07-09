@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { createActivity } from "./activity";
 
 export async function getBoardList(): Promise<{ id: string; title: string; color: string }[]> {
   const session = await getSession();
@@ -109,6 +110,7 @@ export async function addBoardMember(boardId: string, email: string) {
   if (existing) return { error: "El usuario ya es miembro" };
 
   await db.boardMember.create({ data: { userId: user.id, boardId } });
+  createActivity(boardId, session.id, "member_added", `agregó a ${user.name} al tablero`);
   return { success: true };
 }
 
@@ -119,7 +121,39 @@ export async function removeBoardMember(boardId: string, memberRecordId: string)
   const board = await db.board.findUnique({ where: { id: boardId }, select: { ownerId: true } });
   if (!board || board.ownerId !== session.id) return { error: "No tienes permisos" };
 
+  const member = await db.boardMember.findUnique({
+    where: { id: memberRecordId },
+    include: { user: { select: { name: true } } },
+  });
   await db.boardMember.deleteMany({ where: { id: memberRecordId, boardId } });
+  if (member) {
+    createActivity(boardId, session.id, "member_removed", `quitó a ${member.user.name} del tablero`);
+  }
+  return { success: true };
+}
+
+export async function leaveBoard(boardId: string) {
+  const session = await getSession();
+  if (!session) return { error: "No autenticado" };
+
+  const board = await db.board.findUnique({
+    where: { id: boardId },
+    select: { ownerId: true },
+  });
+  if (!board) return { error: "Tablero no encontrado" };
+  if (board.ownerId === session.id) return { error: "Eres el dueño, no puedes salirte. Elimina el tablero si lo deseas." };
+
+  // Reasignar tareas del usuario al dueño
+  await db.task.updateMany({
+    where: { boardId, assigneeId: session.id },
+    data: { assigneeId: board.ownerId },
+  });
+
+  // Eliminar membresía
+  await db.boardMember.deleteMany({
+    where: { boardId, userId: session.id },
+  });
+
   return { success: true };
 }
 

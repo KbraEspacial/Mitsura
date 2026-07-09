@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { getBoards } from "@/lib/actions/board";
+import { getSession } from "@/lib/auth";
 import { NewBoardButton } from "./new-board-button";
+import { BoardCard } from "./board-card";
 
 function groupByMonth(boards: Awaited<ReturnType<typeof getBoards>>) {
   const groups: Record<string, typeof boards> = {};
@@ -22,6 +23,7 @@ function groupByMonth(boards: Awaited<ReturnType<typeof getBoards>>) {
 }
 
 export default async function BoardsPage() {
+  const session = await getSession();
   const boards = await getBoards();
 
   return (
@@ -49,37 +51,9 @@ export default async function BoardsPage() {
                 {group.label}
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.items.map((board) => {
-                  const c = board.color;
-                  return (
-                    <Link
-                      key={board.id}
-                      href={`/boards/${board.id}`}
-                      className="rounded-xl border bg-white p-5 shadow-sm transition-all hover:shadow-md"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white"
-                          style={{ backgroundColor: c }}
-                        >
-                          <span className="text-sm font-bold">
-                            {board.title.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="font-medium truncate">{board.title}</h3>
-                          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                            <span>{board._count.members + 1} miembros</span>
-                            <span className="flex items-center gap-1">
-                              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c }} />
-                              {board._count.tasks} tareas
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+                {group.items.map((board) => (
+                  <BoardCard key={board.id} board={board} userId={session?.id ?? ""} />
+                ))}
               </div>
             </div>
           ))}

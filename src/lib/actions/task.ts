@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { createActivity } from "./activity";
 
 async function syncTaskWithCalendar(
   task: { id: string; title: string; description?: string | null; dueDate?: Date | null; googleEventId?: string | null },
@@ -71,9 +72,12 @@ export async function createTask(boardId: string, columnId: string, title: strin
   const maxOrder = await db.task.aggregate({ where: { columnId }, _max: { order: true } });
   const order = (maxOrder._max.order ?? -1) + 1;
 
-  return db.task.create({
+  const task = await db.task.create({
     data: { title, boardId, columnId, order },
   });
+
+  createActivity(boardId, session.id, "task_created", `creó la tarea "${title}"`);
+  return task;
 }
 
 export async function updateTask(
@@ -105,32 +109,65 @@ export async function updateTaskPosition(
 ) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
-  return db.task.update({
+
+  const old = await db.task.findUnique({
+    where: { id: taskId },
+    select: { columnId: true, title: true, boardId: true },
+  });
+
+  const updated = await db.task.update({
     where: { id: taskId },
     data: { columnId: newColumnId, order: newOrder },
   });
+
+  if (old && old.columnId !== newColumnId) {
+    const col = await db.column.findUnique({ where: { id: newColumnId } });
+    if (col) {
+      createActivity(old.boardId, session.id, "task_moved", `movió "${old.title}" a "${col.title}"`);
+    }
+  }
+
+  return updated;
 }
 
 export async function reorderTasks(tasks: { id: string; order: number; columnId: string }[]) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
 
+  const oldTasks = await db.task.findMany({
+    where: { id: { in: tasks.map((t) => t.id) } },
+    select: { id: true, columnId: true, title: true, boardId: true },
+  });
+  const oldMap = new Map(oldTasks.map((t) => [t.id, t]));
+
   const tx = tasks.map((t) =>
     db.task.update({ where: { id: t.id }, data: { order: t.order, columnId: t.columnId } })
   );
   await db.$transaction(tx);
+
+  for (const t of tasks) {
+    const old = oldMap.get(t.id);
+    if (old && old.columnId !== t.columnId) {
+      const col = await db.column.findUnique({ where: { id: t.columnId } });
+      if (col) {
+        createActivity(old.boardId, session.id, "task_moved", `movió "${old.title}" a "${col.title}"`);
+      }
+    }
+  }
 }
 
 export async function archiveTask(taskId: string) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
-  await db.task.update({ where: { id: taskId }, data: { archived: true } });
+  const task = await db.task.update({ where: { id: taskId }, data: { archived: true } });
+  createActivity(task.boardId, session.id, "task_archived", `archivó "${task.title}"`);
 }
 
 export async function restoreTask(taskId: string) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
-  await db.task.update({ where: { id: taskId }, data: { archived: false } });
+  const task = await db.task.update({ where: { id: taskId }, data: { archived: false } });
+  createActivity(task.boardId, session.id, "task_restored", `restauró "${task.title}"`);
 }
 
 export async function getArchivedCount(boardId: string): Promise<number> {
@@ -188,6 +225,12 @@ export async function addComment(taskId: string, content: string, imageUrls: str
     data: { content: content.trim(), taskId, authorId: session.id, images: JSON.stringify(imageUrls) },
     include: { author: { select: { id: true, name: true, image: true } } },
   });
+
+  const task = await db.task.findUnique({ where: { id: taskId }, select: { title: true, boardId: true } });
+  if (task) {
+    createActivity(task.boardId, session.id, "comment_added", `comentó en "${task.title}"`);
+  }
+
   return { ...comment, images: JSON.parse(comment.images) };
 }
 

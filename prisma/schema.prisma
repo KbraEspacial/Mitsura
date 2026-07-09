@@ -23,6 +23,7 @@ model User {
   memberships    BoardMember[]
   assignedTasks  Task[]
   comments       Comment[]
+  activities     Activity[]
   financeRecords FinanceRecord[]
   fixedExpenses  FixedExpense[]
   debts          Debt[]
@@ -42,6 +43,7 @@ model Board {
   members BoardMember[]
   columns Column[]
   tasks   Task[]
+  activities Activity[]
 }
 
 model BoardMember {
@@ -92,6 +94,21 @@ model Task {
   googleEventId String?
 
   comments Comment[]
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  action    String
+  message   String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, createdAt(sort: Desc)])
 }
 
 model Comment {
