@@ -4,14 +4,14 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export async function getBoardList(): Promise<{ id: string; title: string }[]> {
+export async function getBoardList(): Promise<{ id: string; title: string; color: string }[]> {
   const session = await getSession();
   if (!session) return [];
   return db.board.findMany({
     where: {
       OR: [{ ownerId: session.id }, { members: { some: { userId: session.id } } }],
     },
-    select: { id: true, title: true },
+    select: { id: true, title: true, color: true },
     orderBy: { updatedAt: "desc" },
     take: 20,
   });
@@ -29,6 +29,18 @@ export async function getBoards() {
     },
     orderBy: { updatedAt: "desc" },
   });
+}
+
+export async function updateBoardColor(boardId: string, color: string) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+
+  const board = await db.board.findFirst({
+    where: { id: boardId, ownerId: session.id },
+  });
+  if (!board) throw new Error("No autorizado");
+
+  await db.board.update({ where: { id: boardId }, data: { color } });
 }
 
 export async function getBoard(boardId: string) {
@@ -60,9 +72,12 @@ export async function createBoard(_prev: unknown, form: FormData) {
   const title = form.get("title") as string | null;
   if (!title?.trim()) return { error: "El título es obligatorio" };
 
+  const color = (form.get("color") as string) || "#3b82f6";
+
   const board = await db.board.create({
     data: {
       title,
+      color,
       ownerId: session.id,
       columns: {
         create: [

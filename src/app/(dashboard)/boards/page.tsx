@@ -2,23 +2,6 @@ import Link from "next/link";
 import { getBoards } from "@/lib/actions/board";
 import { NewBoardButton } from "./new-board-button";
 
-const BOARD_COLORS = [
-  { bg: "bg-blue-50", text: "text-blue-600", dot: "bg-blue-500" },
-  { bg: "bg-emerald-50", text: "text-emerald-600", dot: "bg-emerald-500" },
-  { bg: "bg-violet-50", text: "text-violet-600", dot: "bg-violet-500" },
-  { bg: "bg-amber-50", text: "text-amber-600", dot: "bg-amber-500" },
-  { bg: "bg-rose-50", text: "text-rose-600", dot: "bg-rose-500" },
-  { bg: "bg-cyan-50", text: "text-cyan-600", dot: "bg-cyan-500" },
-];
-
-function getBoardColor(title: string) {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return BOARD_COLORS[Math.abs(hash) % BOARD_COLORS.length]!;
-}
-
 function groupByMonth(boards: Awaited<ReturnType<typeof getBoards>>) {
   const groups: Record<string, typeof boards> = {};
   for (const b of boards) {
@@ -67,7 +50,7 @@ export default async function BoardsPage() {
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((board) => {
-                  const color = getBoardColor(board.title);
+                  const c = board.color;
                   return (
                     <Link
                       key={board.id}
@@ -75,8 +58,11 @@ export default async function BoardsPage() {
                       className="rounded-xl border bg-white p-5 shadow-sm transition-all hover:shadow-md"
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color.bg}`}>
-                          <span className={`text-sm font-bold ${color.text}`}>
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white"
+                          style={{ backgroundColor: c }}
+                        >
+                          <span className="text-sm font-bold">
                             {board.title.charAt(0).toUpperCase()}
                           </span>
                         </div>
@@ -84,8 +70,8 @@ export default async function BoardsPage() {
                           <h3 className="font-medium truncate">{board.title}</h3>
                           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                             <span>{board._count.members + 1} miembros</span>
-                            <span className={`flex items-center gap-1`}>
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${color.dot}`} />
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c }} />
                               {board._count.tasks} tareas
                             </span>
                           </div>

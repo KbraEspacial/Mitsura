@@ -17,6 +17,7 @@ type SessionUser = {
 type BoardItem = {
   id: string;
   title: string;
+  color: string;
 };
 
 export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
@@ -46,16 +47,32 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
 
         {boards.length > 0 && (
           <div className="mt-2 flex flex-col gap-0.5">
-            {boards.map((board) => (
-              <Link
-                key={board.id}
-                href={`/boards/${board.id}`}
-                className="ml-1 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <div className="h-2 w-2 shrink-0 rounded-full bg-blue-400" />
-                <span className="truncate">{board.title}</span>
-              </Link>
-            ))}
+            {boards.map((board) => {
+              const isActive = pathname === `/boards/${board.id}`;
+              return (
+                <Link
+                  key={board.id}
+                  href={`/boards/${board.id}`}
+                  className={`ml-1 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    isActive
+                      ? "bg-muted font-semibold text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <div
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: board.color }}
+                  />
+                  <span className="truncate">{board.title}</span>
+                  {isActive && (
+                    <span
+                      className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: board.color }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
           </div>
         )}
 
