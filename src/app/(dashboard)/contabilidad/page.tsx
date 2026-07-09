@@ -155,7 +155,7 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Ingresos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" })}
+              Ingresos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
             </p>
             <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(displayIncome)}</p>
           </div>
@@ -168,7 +168,7 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Gastos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" })}
+              Gastos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
             </p>
             <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(displayExpenses)}</p>
           </div>
@@ -181,7 +181,7 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Balance · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long" })}
+              Balance · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
             </p>
             <p className={`mt-0.5 text-xl font-bold ${displayBalance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(displayBalance)}</p>
           </div>
@@ -222,6 +222,7 @@ export default function ContabilidadPage() {
                           {new Date(m.month + "-01").toLocaleDateString("es-ES", {
                             month: "short",
                             year: "numeric",
+                            timeZone: "UTC",
                           })}
                         </span>
                       </div>

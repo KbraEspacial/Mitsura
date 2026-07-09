@@ -63,6 +63,7 @@ export default function RevisionMensualPage() {
                     {new Date(m.month + "-01").toLocaleDateString("es-ES", {
                       month: "long",
                       year: "numeric",
+                      timeZone: "UTC",
                     })}
                   </button>
                 );
@@ -107,7 +108,7 @@ export default function RevisionMensualPage() {
                     {activeDetail.records.map((r) => (
                       <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="py-2 pr-3 text-muted-foreground">
-                          {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
+                          {new Date(r.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", timeZone: "UTC" })}
                         </td>
                         <td className="py-2 pr-3 font-medium text-foreground">{r.description}</td>
                         <td className="py-2 pr-3">

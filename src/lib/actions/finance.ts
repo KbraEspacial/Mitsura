@@ -78,7 +78,7 @@ export async function getMonthlySummary(): Promise<MonthlySummary[]> {
   const monthlyMap: Record<string, { income: number; expenses: number }> = {};
 
   for (const r of records) {
-    const key = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, "0")}`;
+    const key = r.date.toISOString().slice(0, 7);
     if (!monthlyMap[key]) monthlyMap[key] = { income: 0, expenses: 0 };
     if (r.type === "income") monthlyMap[key].income += r.amount;
     else if (r.type === "expense") monthlyMap[key].expenses += r.amount;
@@ -106,7 +106,7 @@ export async function getMonthlyRecords(): Promise<MonthlyDetail[]> {
   const grouped: Record<string, MonthlyDetail> = {};
 
   for (const r of records) {
-    const key = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, "0")}`;
+    const key = r.date.toISOString().slice(0, 7);
     if (!grouped[key]) {
       grouped[key] = { month: key, income: 0, expenses: 0, balance: 0, records: [] };
     }
