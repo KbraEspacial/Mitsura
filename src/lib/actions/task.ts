@@ -144,6 +144,7 @@ export async function deleteTask(taskId: string) {
 export type CommentInfo = {
   id: string;
   content: string;
+  images: string[];
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string; image: string | null };
@@ -152,37 +153,43 @@ export type CommentInfo = {
 export async function getComments(taskId: string): Promise<CommentInfo[]> {
   const session = await getSession();
   if (!session) return [];
-  return db.comment.findMany({
+  const comments = await db.comment.findMany({
     where: { taskId },
     include: { author: { select: { id: true, name: true, image: true } } },
     orderBy: { createdAt: "asc" },
   });
+  return comments.map((c) => ({ ...c, images: JSON.parse(c.images) }));
 }
 
-export async function addComment(taskId: string, content: string) {
+export async function addComment(taskId: string, content: string, imageUrls: string[] = []) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
-  if (!content.trim()) throw new Error("El comentario no puede estar vacío");
+  if (!content.trim() && imageUrls.length === 0) throw new Error("El comentario no puede estar vacío");
 
-  return db.comment.create({
-    data: { content: content.trim(), taskId, authorId: session.id },
+  const comment = await db.comment.create({
+    data: { content: content.trim(), taskId, authorId: session.id, images: JSON.stringify(imageUrls) },
     include: { author: { select: { id: true, name: true, image: true } } },
   });
+  return { ...comment, images: JSON.parse(comment.images) };
 }
 
-export async function updateComment(commentId: string, content: string) {
+export async function updateComment(commentId: string, content: string, imageUrls?: string[]) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
-  if (!content.trim()) throw new Error("El comentario no puede estar vacío");
+  if (!content.trim() && (!imageUrls || imageUrls.length === 0)) throw new Error("El comentario no puede estar vacío");
 
   const comment = await db.comment.findUnique({ where: { id: commentId } });
   if (!comment || comment.authorId !== session.id) throw new Error("No autorizado");
 
-  return db.comment.update({
+  const data: Record<string, string> = { content: content.trim() };
+  if (imageUrls) data.images = JSON.stringify(imageUrls);
+
+  const updated = await db.comment.update({
     where: { id: commentId },
-    data: { content: content.trim() },
+    data,
     include: { author: { select: { id: true, name: true, image: true } } },
   });
+  return { ...updated, images: JSON.parse(updated.images) };
 }
 
 export async function deleteComment(commentId: string) {

@@ -47,6 +47,7 @@ export function TaskModal({
   const [assigneeId, setAssigneeId] = useState(task.assignee?.id ?? "");
   const [comments, setComments] = useState<CommentInfo[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
 
   useEffect(() => {
@@ -78,11 +79,28 @@ export function TaskModal({
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim()) return;
-    const comment = await addComment(task.id, newComment);
+    if (!newComment.trim() && pendingImages.length === 0) return;
+    const comment = await addComment(task.id, newComment, pendingImages);
     setComments((prev) => [...prev, comment]);
     setNewComment("");
+    setPendingImages([]);
     onUpdate({ ...task, commentCount: task.commentCount + 1 });
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) setPendingImages((prev) => [...prev, dataUrl]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const removePendingImage = (idx: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const formatDate = (d: Date) => {
@@ -219,7 +237,20 @@ export function TaskModal({
                         {formatDate(c.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-xs text-foreground/80 whitespace-pre-wrap">{c.content}</p>
+                    {c.content && <p className="mt-1.5 text-xs text-foreground/80 whitespace-pre-wrap">{c.content}</p>}
+                    {c.images.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {c.images.map((url, i) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={url}
+                              alt={`Imagen ${i + 1}`}
+                              className="max-h-48 max-w-full rounded-lg border object-contain transition-opacity hover:opacity-80"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     {c.updatedAt.getTime() !== c.createdAt.getTime() && (
                       <p className="mt-0.5 text-[10px] text-muted-foreground/60">
                         Editado {formatDate(c.updatedAt)}
@@ -232,6 +263,23 @@ export function TaskModal({
           </div>
 
           <div className="border-t p-3">
+            {pendingImages.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {pendingImages.map((url, i) => (
+                  <div key={i} className="group relative">
+                    <img src={url} alt="" className="h-14 w-14 rounded-lg border object-cover" />
+                    <button
+                      onClick={() => removePendingImage(i)}
+                      className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 value={newComment}
@@ -245,9 +293,15 @@ export function TaskModal({
                 placeholder="Escribe un comentario..."
                 className="min-w-0 flex-1 rounded-lg border border-input px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-input px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-muted/30">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+              </label>
               <button
                 onClick={handleAddComment}
-                disabled={!newComment.trim()}
+                disabled={!newComment.trim() && pendingImages.length === 0}
                 className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 transition-opacity disabled:opacity-40"
               >
                 Enviar
