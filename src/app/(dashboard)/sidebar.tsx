@@ -62,7 +62,10 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
           <h1 className="text-lg font-bold tracking-tight text-foreground">Mitsura</h1>
           <div className="relative" ref={notifRef}>
             <button
-              onClick={() => setNotifOpen(!notifOpen)}
+              onClick={() => {
+                setNotifOpen(!notifOpen);
+                getRecentActivities().then(setActivities);
+              }}
               className="relative flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               title="Actividad reciente"
             >
@@ -77,7 +80,7 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-xl border border-border bg-background shadow-lg">
+              <div className="absolute left-full top-0 z-50 ml-2 w-72 rounded-xl border border-border bg-background shadow-lg">
                 <div className="border-b border-border px-4 py-3">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actividad reciente</h4>
                 </div>
