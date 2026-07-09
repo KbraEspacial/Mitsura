@@ -108,6 +108,26 @@ export function TaskModal({
     setPendingImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item) continue;
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          if (dataUrl) setPendingImages((prev) => [...prev, dataUrl]);
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  };
+
   const formatDate = (d: Date) => {
     const date = new Date(d);
     const now = new Date();
@@ -290,13 +310,14 @@ export function TaskModal({
               <input
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleAddComment();
                   }
                 }}
-                placeholder="Escribe un comentario..."
+                placeholder="Escribe un comentario... (Ctrl+V para pegar imagen)"
                 className="min-w-0 flex-1 rounded-lg border border-input px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
               <label className="flex cursor-pointer items-center justify-center rounded-lg border border-input px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-muted/30">
