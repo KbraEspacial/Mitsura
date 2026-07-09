@@ -49,6 +49,7 @@ export function TaskModal({
   const [newComment, setNewComment] = useState("");
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -266,13 +267,13 @@ export function TaskModal({
                     {c.images.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {c.images.map((url, i) => (
-                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                          <button key={i} onClick={() => setLightboxUrl(url)} className="p-0 border-0 bg-transparent cursor-pointer">
                             <img
                               src={url}
                               alt={`Imagen ${i + 1}`}
                               className="max-h-48 max-w-full rounded-lg border object-contain transition-opacity hover:opacity-80"
                             />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -337,6 +338,28 @@ export function TaskModal({
           </div>
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            onClick={() => setLightboxUrl(null)}
+            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white transition-colors hover:bg-white/30"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Imagen ampliada"
+            className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {confirmDelete ? (
         <div className="absolute bottom-12 right-12 flex items-center gap-2">
