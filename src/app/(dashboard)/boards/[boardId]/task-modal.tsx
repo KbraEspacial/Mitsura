@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { updateTask, getComments, addComment, type CommentInfo } from "@/lib/actions/task";
 
 type Member = { id: string; name: string; email: string };
@@ -49,6 +49,11 @@ export function TaskModal({
   const [newComment, setNewComment] = useState("");
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [comments]);
 
   useEffect(() => {
     getComments(task.id).then((data) => {
@@ -215,7 +220,7 @@ export function TaskModal({
             </h3>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="max-h-[360px] overflow-y-auto px-4 py-3">
             {loadingComments ? (
               <p className="text-xs text-muted-foreground">Cargando...</p>
             ) : comments.length === 0 ? (
@@ -258,6 +263,7 @@ export function TaskModal({
                     )}
                   </div>
                 ))}
+                <div ref={commentsEndRef} />
               </div>
             )}
           </div>
