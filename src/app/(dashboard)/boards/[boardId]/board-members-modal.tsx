@@ -60,7 +60,7 @@ export function BoardMembersModal({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-12 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-md rounded-xl border border-border bg-white shadow-xl">
+      <div className="w-full max-w-md rounded-xl border border-border bg-background shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <h2 className="text-base font-semibold text-foreground">Miembros del tablero</h2>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted transition-colors">

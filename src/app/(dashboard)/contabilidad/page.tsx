@@ -26,7 +26,15 @@ export default function ContabilidadPage() {
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = JSON.parse(localStorage.getItem("dismissedAlerts") ?? "[]");
+      return new Set<number>(stored);
+    } catch {
+      return new Set();
+    }
+  });
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -58,6 +66,23 @@ export default function ContabilidadPage() {
       .sort((a, b) => b.amount - a.amount);
   }, [monthData]);
 
+  const persistDismissed = (updated: Set<number>) => {
+    localStorage.setItem("dismissedAlerts", JSON.stringify([...updated]));
+  };
+
+  const handleDismiss = (i: number) => {
+    const updated = new Set(dismissedAlerts);
+    updated.add(i);
+    setDismissedAlerts(updated);
+    persistDismissed(updated);
+  };
+
+  const handleDismissAll = () => {
+    const allIndices = new Set(alerts.map((_, i) => i));
+    setDismissedAlerts(allIndices);
+    persistDismissed(allIndices);
+  };
+
   const activeAlerts = alerts.filter((_, i) => !dismissedAlerts.has(i));
 
   if (!summary) {
@@ -84,11 +109,21 @@ export default function ContabilidadPage() {
           >
             <div className="flex items-center justify-between border-b px-4 py-3">
               <h4 className="text-sm font-semibold text-foreground">Notificaciones</h4>
-              <button onClick={() => setNotifOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {activeAlerts.length > 0 && (
+                  <button
+                    onClick={handleDismissAll}
+                    className="text-[10px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    Descartar todo
+                  </button>
+                )}
+                <button onClick={() => setNotifOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="max-h-80 overflow-y-auto p-4">
               {activeAlerts.length === 0 ? (
@@ -101,7 +136,7 @@ export default function ContabilidadPage() {
                       <div key={i} className="group relative rounded-lg bg-amber-50 px-3 py-2 pr-8 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                         {a}
                         <button
-                          onClick={() => setDismissedAlerts(new Set([...dismissedAlerts, i]))}
+                          onClick={() => handleDismiss(i)}
                           className="absolute right-1.5 top-1.5 hidden rounded p-0.5 text-amber-400 hover:bg-amber-200 hover:text-amber-700 group-hover:block"
                         >
                           <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

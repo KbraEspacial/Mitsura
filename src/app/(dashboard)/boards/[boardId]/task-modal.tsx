@@ -147,7 +147,7 @@ export function TaskModal({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-12 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex w-full max-w-2xl gap-0 rounded-xl border border-border bg-white shadow-xl">
+      <div className="flex w-full max-w-2xl gap-0 rounded-xl border border-border bg-background shadow-xl">
         <div className="flex-1">
           <div className="flex items-center justify-between border-b px-5 py-4">
             <h2 className="text-base font-semibold text-foreground">Detalle de tarea</h2>
@@ -155,10 +155,10 @@ export function TaskModal({
               {onArchive && (
                 <button
                   onClick={() => onArchive(task.id)}
-                  className={`rounded-lg p-1.5 transition-colors ${
+                                    className={`rounded-lg p-1.5 transition-colors ${
                     task.archived
-                      ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                      : "text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
+                      ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950 dark:hover:text-emerald-300"
+                      : "text-muted-foreground hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 dark:hover:text-amber-400"
                   }`}
                   title={task.archived ? "Restaurar tarea" : "Archivar tarea"}
                 >
@@ -396,7 +396,7 @@ export function TaskModal({
           </button>
           <button
             onClick={() => setConfirmDelete(false)}
-            className="rounded-lg border border-input bg-white px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors shadow-lg"
+            className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors shadow-lg"
           >
             Cancelar
           </button>
@@ -405,7 +405,7 @@ export function TaskModal({
         <div className="absolute bottom-12 right-12 flex gap-2">
           <button
             onClick={onClose}
-            className="rounded-lg border border-input bg-white px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors shadow-lg"
+            className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors shadow-lg"
           >
             Cancelar
           </button>

@@ -25,7 +25,15 @@ type BoardItem = {
 export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [activities, setActivities] = useState<ActivityInfo[]>([]);
-  const [dismissedNotifs, setDismissedNotifs] = useState<Set<string>>(new Set());
+  const [dismissedNotifs, setDismissedNotifs] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = JSON.parse(localStorage.getItem("dismissedNotifs") ?? "[]");
+      return new Set<string>(stored);
+    } catch {
+      return new Set();
+    }
+  });
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -50,12 +58,23 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
 
   const visibleActivities = activities.filter((a) => !dismissedNotifs.has(a.id));
 
+  const persistDismissed = (updated: Set<string>) => {
+    localStorage.setItem("dismissedNotifs", JSON.stringify([...updated]));
+  };
+
   const handleDismiss = (id: string) => {
-    setDismissedNotifs((prev) => new Set(prev).add(id));
+    setDismissedNotifs((prev) => {
+      const updated = new Set(prev);
+      updated.add(id);
+      persistDismissed(updated);
+      return updated;
+    });
   };
 
   const handleDismissAll = () => {
-    setDismissedNotifs(new Set(activities.map((a) => a.id)));
+    const updated = new Set(activities.map((a) => a.id));
+    setDismissedNotifs(updated);
+    persistDismissed(updated);
   };
 
   const formatActivityTime = (d: Date) => {

@@ -325,7 +325,7 @@ export function BoardKanban({
 
           <DragOverlay>
             {activeTask ? (
-              <div className="rounded-lg border bg-white p-3 text-sm shadow-xl">
+              <div className="rounded-lg border bg-background p-3 text-sm shadow-xl">
                 {activeTask.title}
               </div>
             ) : null}

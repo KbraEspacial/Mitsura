@@ -24,7 +24,7 @@ export function NewBoardButton() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-lg">
+          <div className="w-full max-w-sm rounded-xl border bg-background p-6 shadow-lg">
             <h2 className="mb-4 text-lg font-semibold">Nuevo tablero</h2>
             <form
               action={async (form) => {
