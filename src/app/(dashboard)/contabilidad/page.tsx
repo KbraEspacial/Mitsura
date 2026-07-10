@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   getFinanceSummary,
   getMonthlySummary,
   getMonthlyRecords,
-  getExpensesByCategory,
   getFinanceAdvice,
   type FinanceSummary,
   type MonthlySummary,
   type MonthlyDetail,
-  type CategoryBreakdown,
 } from "@/lib/actions/finance";
 
 const formatCurrency = (amount: number) =>
@@ -26,7 +24,6 @@ const CATEGORY_COLORS = [
 export default function ContabilidadPage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
-  const [categories, setCategories] = useState<CategoryBreakdown[]>([]);
   const [monthlyDetails, setMonthlyDetails] = useState<MonthlyDetail[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
@@ -40,7 +37,6 @@ export default function ContabilidadPage() {
     });
     getMonthlySummary().then(setMonthly);
     getMonthlyRecords().then(setMonthlyDetails);
-    getExpensesByCategory().then(setCategories);
   }, []);
 
   const monthData = monthlyDetails.find((m) => m.month === selectedMonth);
@@ -48,6 +44,19 @@ export default function ContabilidadPage() {
   const monthIncome = monthData ? monthData.income : 0;
   const monthExpenses = monthData ? monthData.expenses : 0;
   const monthBalance = monthData ? monthData.balance : 0;
+
+  const monthCategories = useMemo(() => {
+    const expenseRecords = monthData?.records.filter((r) => r.type === "expense") ?? [];
+    const grouped = new Map<string, number>();
+    for (const r of expenseRecords) {
+      if (!r.category) continue;
+      grouped.set(r.category, (grouped.get(r.category) ?? 0) + r.amount);
+    }
+    const total = [...grouped.values()].reduce((a, b) => a + b, 0);
+    return [...grouped.entries()]
+      .map(([category, amount]) => ({ category, amount, percentage: total > 0 ? (amount / total) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [monthData]);
 
   const activeAlerts = alerts.filter((_, i) => !dismissedAlerts.has(i));
 
@@ -70,7 +79,7 @@ export default function ContabilidadPage() {
       {notifOpen && (
         <div className="fixed inset-0 z-50" onClick={() => setNotifOpen(false)}>
           <div
-            className="fixed right-6 top-4 w-80 rounded-xl border border-border bg-white shadow-lg"
+            className="fixed right-6 top-4 w-80 rounded-xl border border-border bg-background shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b px-4 py-3">
@@ -89,7 +98,7 @@ export default function ContabilidadPage() {
                   {alerts.map((a, i) => {
                     if (dismissedAlerts.has(i)) return null;
                     return (
-                      <div key={i} className="group relative rounded-lg bg-amber-50 px-3 py-2 pr-8 text-xs text-amber-800">
+                      <div key={i} className="group relative rounded-lg bg-amber-50 px-3 py-2 pr-8 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                         {a}
                         <button
                           onClick={() => setDismissedAlerts(new Set([...dismissedAlerts, i]))}
@@ -124,14 +133,14 @@ export default function ContabilidadPage() {
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300 dark:focus:border-blue-500 dark:focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-3">
           {/* Notifications bell */}
           <button
             onClick={() => setNotifOpen(!notifOpen)}
-            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:bg-muted/30"
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted/30"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -207,7 +216,7 @@ export default function ContabilidadPage() {
 
       {/* Charts row */}
       <div className="mb-8 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-foreground">
             Ingresos vs Gastos por Mes
           </h3>
@@ -220,11 +229,11 @@ export default function ContabilidadPage() {
                 const ew = (m.expenses / maxMonthly) * 100;
                 const isSelected = m.month === selectedMonth;
                 return (
-                  <div key={m.month} className={`rounded-lg p-2 transition-colors ${isSelected ? "bg-blue-50 ring-1 ring-blue-200" : ""}`}>
+                  <div key={m.month} className={`rounded-lg p-2 transition-colors ${isSelected ? "bg-blue-50 ring-1 ring-blue-200 dark:bg-blue-950 dark:ring-blue-800" : ""}`}>
                     <div className="mb-1.5 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                        <span className={`font-semibold ${isSelected ? "text-blue-700" : "text-foreground"}`}>
+                        <span className={`font-semibold ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
                           {new Date(m.month + "-01").toLocaleDateString("es-ES", {
                             month: "short",
                             year: "numeric",
@@ -238,13 +247,13 @@ export default function ContabilidadPage() {
                     </div>
                     <div className="flex gap-0.5">
                       <div className="flex-1">
-                        <div className="relative h-6 w-full rounded-md bg-gray-100">
+                        <div className="relative h-6 w-full rounded-md bg-muted">
                           <div className="h-full rounded-md bg-emerald-400 transition-all" style={{ width: `${iw}%` }} />
                         </div>
                         <p className="mt-0.5 text-[11px] text-emerald-600">{formatCurrency(m.income)}</p>
                       </div>
                       <div className="flex-1">
-                        <div className="relative h-6 w-full rounded-md bg-gray-100">
+                        <div className="relative h-6 w-full rounded-md bg-muted">
                           <div className="h-full rounded-md bg-red-400 transition-all" style={{ width: `${ew}%` }} />
                         </div>
                         <p className="mt-0.5 text-[11px] text-red-500">{formatCurrency(m.expenses)}</p>
@@ -257,16 +266,16 @@ export default function ContabilidadPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-foreground">
-            Gastos por Concepto
+            Gastos del mes por Concepto
           </h3>
-          {categories.length === 0 ? (
+          {monthCategories.length === 0 ? (
             <p className="text-xs text-muted-foreground">No hay gastos registrados aún</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {categories.map((c, i) => {
-                const maxCat = categories[0]!.amount || 1;
+              {monthCategories.map((c, i) => {
+                const maxCat = monthCategories[0]!.amount || 1;
                 const w = (c.amount / maxCat) * 100;
                 return (
                   <div key={c.category}>
@@ -282,7 +291,7 @@ export default function ContabilidadPage() {
                         {formatCurrency(c.amount)} <span className="text-muted-foreground/50">({c.percentage.toFixed(1)}%)</span>
                       </span>
                     </div>
-                    <div className="h-5 w-full rounded-md bg-gray-100">
+                    <div className="h-5 w-full rounded-md bg-muted">
                       <div
                         className="h-full rounded-md transition-all"
                         style={{ width: `${w}%`, backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
@@ -300,42 +309,42 @@ export default function ContabilidadPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/contabilidad/ingresos"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-emerald-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30"
         >
           <p className="text-sm font-medium text-foreground">Gestionar ingresos</p>
           <p className="mt-1 text-xs text-muted-foreground">Añade y revisa tus ingresos</p>
         </Link>
         <Link
           href="/contabilidad/gastos"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-red-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-red-50/40 dark:hover:bg-red-950/30"
         >
           <p className="text-sm font-medium text-foreground">Gestionar gastos</p>
           <p className="mt-1 text-xs text-muted-foreground">Controla tus gastos diarios</p>
         </Link>
         <Link
           href="/contabilidad/gastos-fijos"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-blue-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-950/30"
         >
           <p className="text-sm font-medium text-foreground">Gastos fijos</p>
           <p className="mt-1 text-xs text-muted-foreground">Administra tus suscripciones y facturas</p>
         </Link>
         <Link
           href="/contabilidad/deudas"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-amber-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-amber-50/40 dark:hover:bg-amber-950/30"
         >
           <p className="text-sm font-medium text-foreground">Deudas</p>
           <p className="mt-1 text-xs text-muted-foreground">Haz seguimiento de tus deudas</p>
         </Link>
         <Link
           href="/contabilidad/revision-mensual"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-indigo-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30"
         >
           <p className="text-sm font-medium text-foreground">Revisión mensual</p>
           <p className="mt-1 text-xs text-muted-foreground">Ingresos y gastos detallados por mes</p>
         </Link>
         <Link
           href="/contabilidad/ia"
-          className="rounded-xl border border-border bg-white p-5 shadow-sm transition-colors hover:bg-purple-50/40"
+          className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-purple-50/40 dark:hover:bg-purple-950/30"
         >
           <p className="text-sm font-medium text-foreground">Asistente IA</p>
           <p className="mt-1 text-xs text-muted-foreground">Recibe consejos financieros personalizados</p>
