@@ -155,12 +155,9 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Ingresos totales
+              Ingresos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
             </p>
-            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(summary.totalIncome)}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-              Este mes: {formatCurrency(monthIncome)}
-            </p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(monthIncome)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
@@ -171,12 +168,9 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Gastos totales
+              Gastos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
             </p>
-            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(summary.totalExpenses)}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-              Este mes: {formatCurrency(monthExpenses)}
-            </p>
+            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(monthExpenses)}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">

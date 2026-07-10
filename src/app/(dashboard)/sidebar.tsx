@@ -25,6 +25,7 @@ type BoardItem = {
 export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [activities, setActivities] = useState<ActivityInfo[]>([]);
+  const [dismissedNotifs, setDismissedNotifs] = useState<Set<string>>(new Set());
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -46,6 +47,16 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
     if (notifOpen) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [notifOpen]);
+
+  const visibleActivities = activities.filter((a) => !dismissedNotifs.has(a.id));
+
+  const handleDismiss = (id: string) => {
+    setDismissedNotifs((prev) => new Set(prev).add(id));
+  };
+
+  const handleDismissAll = () => {
+    setDismissedNotifs(new Set(activities.map((a) => a.id)));
+  };
 
   const formatActivityTime = (d: Date) => {
     const diff = Date.now() - new Date(d).getTime();
@@ -72,42 +83,64 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {activities.length > 0 && (
+              {visibleActivities.length > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-bold text-white">
-                  {activities.length > 9 ? "9+" : activities.length}
+                  {visibleActivities.length > 9 ? "9+" : visibleActivities.length}
                 </span>
               )}
             </button>
 
             {notifOpen && (
               <div className="absolute left-full top-0 z-50 ml-2 w-72 rounded-xl border border-border bg-background shadow-lg">
-                <div className="border-b border-border px-4 py-3">
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actividad reciente</h4>
+                  {visibleActivities.length > 0 && (
+                    <button
+                      onClick={handleDismissAll}
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Descartar todo
+                    </button>
+                  )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {activities.length === 0 ? (
-                    <p className="px-4 py-6 text-center text-xs text-muted-foreground">Sin actividad reciente</p>
+                  {visibleActivities.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+                      {activities.length === 0 ? "Sin actividad reciente" : "Todo descartado"}
+                    </p>
                   ) : (
                     <div className="flex flex-col">
-                      {activities.slice(0, 3).map((a) => (
-                        <Link
+                      {visibleActivities.slice(0, 3).map((a) => (
+                        <div
                           key={a.id}
-                          href={`/boards/${a.board.id}`}
-                          onClick={() => setNotifOpen(false)}
-                          className="flex items-start gap-3 px-4 py-3 text-xs transition-colors hover:bg-muted/50"
+                          className="group relative flex items-start gap-3 px-4 py-3 text-xs transition-colors hover:bg-muted/50"
                         >
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[9px] font-medium text-blue-700">
-                            {a.user.name.charAt(0).toUpperCase()}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-foreground">
-                              <span className="font-medium">{a.user.name}</span> {a.message}
-                            </p>
-                            <p className="mt-0.5 text-muted-foreground/70">
-                              {formatActivityTime(a.createdAt)} · {a.board.title}
-                            </p>
-                          </div>
-                        </Link>
+                          <Link
+                            href={`/boards/${a.board.id}`}
+                            onClick={() => setNotifOpen(false)}
+                            className="flex items-start gap-3 min-w-0 flex-1"
+                          >
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[9px] font-medium text-blue-700">
+                              {a.user.name.charAt(0).toUpperCase()}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-foreground">
+                                <span className="font-medium">{a.user.name}</span> {a.message}
+                              </p>
+                              <p className="mt-0.5 text-muted-foreground/70">
+                                {formatActivityTime(a.createdAt)} · {a.board.title}
+                              </p>
+                            </div>
+                          </Link>
+                          <button
+                            onClick={() => handleDismiss(a.id)}
+                            className="absolute right-2 top-3 hidden h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground group-hover:flex"
+                          >
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
