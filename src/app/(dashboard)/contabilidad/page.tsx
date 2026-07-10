@@ -45,9 +45,9 @@ export default function ContabilidadPage() {
 
   const monthData = monthlyDetails.find((m) => m.month === selectedMonth);
 
-  const displayIncome = monthData ? monthData.income : 0;
-  const displayExpenses = monthData ? monthData.expenses : 0;
-  const displayBalance = monthData ? monthData.balance : 0;
+  const monthIncome = monthData ? monthData.income : 0;
+  const monthExpenses = monthData ? monthData.expenses : 0;
+  const monthBalance = monthData ? monthData.balance : 0;
 
   const activeAlerts = alerts.filter((_, i) => !dismissedAlerts.has(i));
 
@@ -147,7 +147,7 @@ export default function ContabilidadPage() {
 
       {/* Summary cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -155,12 +155,15 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Ingresos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
+              Ingresos totales
             </p>
-            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(displayIncome)}</p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-600">{formatCurrency(summary.totalIncome)}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+              Este mes: {formatCurrency(monthIncome)}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-100 text-red-500">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -168,25 +171,31 @@ export default function ContabilidadPage() {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Gastos · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
+              Gastos totales
             </p>
-            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(displayExpenses)}</p>
+            <p className="mt-0.5 text-xl font-bold text-red-500">{formatCurrency(summary.totalExpenses)}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+              Este mes: {formatCurrency(monthExpenses)}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
-          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${displayBalance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${summary.balance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
             </svg>
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Balance · {new Date(selectedMonth + "-01").toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" })}
+              Balance disponible
             </p>
-            <p className={`mt-0.5 text-xl font-bold ${displayBalance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(displayBalance)}</p>
+            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(summary.balance)}</p>
+            <p className={`mt-0.5 text-[11px] ${monthBalance >= 0 ? "text-emerald-600/70" : "text-red-500/70"}`}>
+              Este mes: {formatCurrency(monthBalance)}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -195,6 +204,9 @@ export default function ContabilidadPage() {
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Deudas activas</p>
             <p className="mt-0.5 text-xl font-bold text-amber-600">{summary.activeDebtsCount}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+              {formatCurrency(summary.totalDebtRemaining)} pendiente
+            </p>
           </div>
         </div>
       </div>
