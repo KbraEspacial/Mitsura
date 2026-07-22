@@ -79,7 +79,7 @@ export default function GastosFijosPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-background p-4 shadow-sm"
       >
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Nombre</label>
@@ -137,7 +137,7 @@ export default function GastosFijosPage() {
               </tr>
             ) : (
               expenses.map((exp) => (
-                <tr key={exp.id} className="border-b last:border-0 transition-colors hover:bg-blue-50/40">
+                <tr key={exp.id} className="border-b last:border-0 transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-950/30">
                   <td className="px-5 py-3.5 font-medium text-foreground">{exp.name}</td>
                   <td className="px-5 py-3.5 text-muted-foreground">{exp.category ?? "—"}</td>
                   <td className="px-5 py-3.5 font-semibold text-foreground">{formatCurrency(exp.amount)}</td>
@@ -146,11 +146,11 @@ export default function GastosFijosPage() {
                     <button
                       onClick={() => handleToggle(exp.id, !exp.isActive)}
                       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
-                        exp.isActive ? "bg-emerald-500 border-emerald-600" : "bg-gray-200 border-gray-300"
+                        exp.isActive ? "bg-emerald-500 border-emerald-600" : "bg-gray-200 border-gray-300 dark:bg-gray-700 dark:border-gray-600"
                       }`}
                     >
                       <span
-                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-all ${
+                        className={`inline-block h-3.5 w-3.5 rounded-full bg-background shadow-sm transition-all ${
                           exp.isActive ? "translate-x-4" : "translate-x-0.5"
                         }`}
                       />
@@ -159,7 +159,7 @@ export default function GastosFijosPage() {
                   <td className="px-5 py-3.5">
                     <button
                       onClick={() => handleDelete(exp.id)}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                      className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors dark:hover:bg-red-950/50 dark:hover:text-red-400"
                     >
                       Eliminar
                     </button>

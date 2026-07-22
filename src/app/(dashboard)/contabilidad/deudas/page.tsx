@@ -26,7 +26,7 @@ const formatCurrency = (amount: number) =>
 
 const formatDate = (d: string | null) =>
   d
-    ? new Date(d).toLocaleDateString("es-ES", {
+    ? new Date(d + "T00:00:00").toLocaleDateString("es-ES", {
         day: "2-digit",
         month: "short",
         year: "numeric",
@@ -60,7 +60,7 @@ export default function DeudasPage() {
       name: form.name.trim(),
       totalAmount,
       interestRate: form.interestRate ? parseFloat(form.interestRate) : undefined,
-      dueDate: form.dueDate ? new Date(form.dueDate) : undefined,
+      dueDate: form.dueDate ? new Date(form.dueDate + "T00:00:00") : undefined,
       notes: form.notes.trim() || undefined,
     };
 
@@ -88,7 +88,7 @@ export default function DeudasPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-background p-4 shadow-sm"
       >
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Nombre</label>
@@ -127,7 +127,7 @@ export default function DeudasPage() {
 
       <div className="flex flex-col gap-4">
         {debts.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white py-16 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border border-border bg-background py-16 text-center text-sm text-muted-foreground">
             No hay deudas registradas
           </div>
         ) : (
@@ -135,20 +135,20 @@ export default function DeudasPage() {
             const remaining = debt.totalAmount - debt.paidAmount;
             const pct = debt.totalAmount > 0 ? (debt.paidAmount / debt.totalAmount) * 100 : 0;
             return (
-              <div key={debt.id} className="rounded-xl border border-border bg-white p-5 shadow-sm">
+              <div key={debt.id} className="rounded-xl border border-border bg-background p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-semibold text-foreground">{debt.name}</h3>
                       {!debt.isActive && (
-                        <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-muted-foreground">Pagada</span>
+                        <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Pagada</span>
                       )}
                     </div>
                     {debt.notes && <p className="mt-0.5 text-xs text-muted-foreground">{debt.notes}</p>}
                   </div>
                   <button
                     onClick={() => handleDelete(debt.id)}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                    className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0 dark:hover:bg-red-950/50"
                   >
                     Eliminar
                   </button>
@@ -174,7 +174,7 @@ export default function DeudasPage() {
                 </div>
 
                 <div className="mt-3">
-                  <div className="flex h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{Math.round(pct)}% pagado</p>

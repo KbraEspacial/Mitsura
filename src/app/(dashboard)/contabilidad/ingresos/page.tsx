@@ -31,6 +31,13 @@ type RecordForm = {
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
 
+const toInputDate = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const formatDate = (d: Date | string) =>
   new Date(d).toLocaleDateString("es-ES", {
     day: "2-digit",
@@ -60,10 +67,9 @@ export default function IngresosPage() {
   }, [fetchRecords]);
 
   const filteredRecords = records.filter((r) => {
-    if (dateFrom && new Date(r.date) < new Date(dateFrom)) return false;
+    if (dateFrom && new Date(r.date) < new Date(dateFrom + "T00:00:00")) return false;
     if (dateTo) {
-      const end = new Date(dateTo);
-      end.setHours(23, 59, 59, 999);
+      const end = new Date(dateTo + "T23:59:59");
       if (new Date(r.date) > end) return false;
     }
     if (catFilter && (r.category ?? "Sin categoría") !== catFilter) return false;
@@ -82,7 +88,7 @@ export default function IngresosPage() {
       amount,
       description: form.description.trim(),
       category: form.category.trim() || undefined,
-      date: form.date ? new Date(form.date) : undefined,
+      date: form.date ? new Date(form.date + "T00:00:00") : undefined,
     };
 
     if (editingId) {
@@ -101,7 +107,7 @@ export default function IngresosPage() {
       amount: r.amount.toString(),
       description: r.description,
       category: r.category ?? "",
-      date: new Date(r.date).toISOString().split("T")[0] ?? "",
+      date: toInputDate(new Date(r.date)),
     });
   };
 

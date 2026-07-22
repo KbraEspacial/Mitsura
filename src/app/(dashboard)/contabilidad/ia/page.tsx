@@ -42,9 +42,9 @@ export default function IaPage() {
     <div>
       <h2 className="mb-6 text-2xl font-bold tracking-tight">Asistente financiero IA</h2>
 
-      <div className="mb-6 rounded-xl border border-border bg-gradient-to-br from-blue-50 to-indigo-50 p-6 shadow-sm">
+      <div className="mb-6 rounded-xl border border-border bg-gradient-to-br from-blue-50 to-indigo-50 p-6 shadow-sm dark:from-blue-950 dark:to-indigo-950">
         <div className="mb-4 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-lg">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-lg dark:bg-indigo-900">
             🤖
           </span>
           <div>
@@ -56,7 +56,7 @@ export default function IaPage() {
           </div>
         </div>
 
-        <div className="rounded-lg bg-white/80 p-4 text-sm leading-relaxed text-foreground shadow-sm">
+        <div className="rounded-lg bg-background/80 p-4 text-sm leading-relaxed text-foreground shadow-sm">
           {advice?.resumen}
         </div>
       </div>
@@ -69,9 +69,9 @@ export default function IaPage() {
           {advice?.recomendaciones.map((r, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+              className="flex items-start gap-3 rounded-xl border border-border bg-background p-4 shadow-sm"
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                 {i + 1}
               </span>
               <p className="text-sm text-foreground leading-relaxed">{r}</p>
@@ -88,9 +88,9 @@ export default function IaPage() {
           {advice?.alertas.map((a, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+              className="flex items-start gap-3 rounded-xl border border-border bg-background p-4 shadow-sm"
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm dark:bg-amber-900">
                 ⚠️
               </span>
               <p className="text-sm text-foreground leading-relaxed">{a}</p>

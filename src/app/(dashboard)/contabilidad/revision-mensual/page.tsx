@@ -40,7 +40,7 @@ export default function RevisionMensualPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-white shadow-sm">
+      <div className="rounded-xl border border-border bg-background shadow-sm">
         {monthlyDetails.length === 0 ? (
           <div className="px-5 py-8 text-center text-xs text-muted-foreground">
             No hay registros mensuales aún
@@ -57,7 +57,7 @@ export default function RevisionMensualPage() {
                     className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                       active
                         ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-gray-100 text-muted-foreground hover:bg-gray-200"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                     }`}
                   >
                     {new Date(m.month + "-01").toLocaleDateString("es-ES", {
@@ -73,18 +73,18 @@ export default function RevisionMensualPage() {
             {activeDetail && (
               <div className="p-5">
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30">
                     <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Ingresos</p>
                     <p className="mt-0.5 text-lg font-bold text-emerald-600">{formatCurrency(activeDetail.income)}</p>
                   </div>
-                  <div className="rounded-lg border border-red-200 bg-red-50/50 px-4 py-3">
+                  <div className="rounded-lg border border-red-200 bg-red-50/50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30">
                     <p className="text-[10px] font-medium uppercase tracking-wider text-red-500">Gastos</p>
                     <p className="mt-0.5 text-lg font-bold text-red-500">{formatCurrency(activeDetail.expenses)}</p>
                   </div>
                   <div className={`rounded-lg border px-4 py-3 ${
                     activeDetail.balance >= 0
-                      ? "border-blue-200 bg-blue-50/50"
-                      : "border-red-200 bg-red-50/50"
+                      ? "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30"
+                      : "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
                   }`}>
                     <p className={`text-[10px] font-medium uppercase tracking-wider ${
                       activeDetail.balance >= 0 ? "text-blue-600" : "text-red-500"
@@ -112,7 +112,7 @@ export default function RevisionMensualPage() {
                         </td>
                         <td className="py-2 pr-3 font-medium text-foreground">{r.description}</td>
                         <td className="py-2 pr-3">
-                          <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                             {r.category || "—"}
                           </span>
                         </td>
