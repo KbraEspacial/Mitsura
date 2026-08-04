@@ -27,6 +27,7 @@ model User {
   financeRecords FinanceRecord[]
   fixedExpenses  FixedExpense[]
   debts          Debt[]
+  aiAlerts       AiAlert[]
 }
 
 model Board {
@@ -172,4 +173,21 @@ model Debt {
   user   User   @relation(fields: [userId], references: [id])
 
   payments FinanceRecord[]
+}
+
+model AiAlert {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  category  String   // "spending" | "budget" | "fixed_due" | "debt_due" | "deficit" | "insight"
+  source    String   @default("rules") // "rules" | "gemini"
+  isRead    Boolean  @default(false)
+  dedupeKey String   @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, dedupeKey])
+  @@index([userId, createdAt(sort: Desc)])
 }

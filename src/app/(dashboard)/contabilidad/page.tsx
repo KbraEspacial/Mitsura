@@ -11,6 +11,12 @@ import {
   type MonthlySummary,
   type MonthlyDetail,
 } from "@/lib/actions/finance";
+import {
+  getActiveAIAlerts,
+  markAIAlertRead,
+  markAllAIAlertsRead,
+  type AiAlertInfo,
+} from "@/lib/actions/ai";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
@@ -37,6 +43,7 @@ export default function ContabilidadPage() {
   });
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [notifOpen, setNotifOpen] = useState(false);
+  const [aiAlerts, setAiAlerts] = useState<AiAlertInfo[]>([]);
 
   useEffect(() => {
     getFinanceSummary().then((s) => {
@@ -45,6 +52,7 @@ export default function ContabilidadPage() {
     });
     getMonthlySummary().then(setMonthly);
     getMonthlyRecords().then(setMonthlyDetails);
+    getActiveAIAlerts().then(setAiAlerts);
   }, []);
 
   const monthData = monthlyDetails.find((m) => m.month === selectedMonth);
@@ -339,6 +347,73 @@ export default function ContabilidadPage() {
           )}
         </div>
       </div>
+
+      {/* AI alerts */}
+      {aiAlerts.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[10px] dark:bg-indigo-900">
+                🤖
+              </span>
+              IA detectó
+            </h3>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/contabilidad/ia"
+                className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Preguntar a la IA →
+              </Link>
+              <button
+                onClick={async () => {
+                  await markAllAIAlertsRead();
+                  setAiAlerts([]);
+                }}
+                className="text-[10px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                Descartar todo
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {aiAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="group flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50/50 px-4 py-3 dark:border-indigo-800 dark:bg-indigo-950/30"
+              >
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                  {alert.category === "spending"
+                    ? "📈"
+                    : alert.category === "fixed_due"
+                      ? "🗓️"
+                      : alert.category === "debt_due"
+                        ? "💳"
+                        : alert.category === "deficit"
+                          ? "🔴"
+                          : "⚠️"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">{alert.title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{alert.message}</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await markAIAlertRead(alert.id);
+                    setAiAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                  }}
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-indigo-200/50 hover:text-foreground"
+                  title="Descartar"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick links */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

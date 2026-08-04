@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { getBoardList } from "@/lib/actions/board";
 import { logout } from "@/lib/actions/auth";
 import { getRecentActivities, type ActivityInfo } from "@/lib/actions/activity";
+import { getUnreadAIAlertCount } from "@/lib/actions/ai";
 import ThemeToggle from "@/components/theme-toggle";
 
 type SessionUser = {
@@ -34,12 +35,14 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
       return new Set();
     }
   });
+  const [aiAlertCount, setAiAlertCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
   useEffect(() => {
     getBoardList().then(setBoards);
+    getUnreadAIAlertCount().then(setAiAlertCount);
   }, [pathname]);
 
   useEffect(() => {
@@ -222,6 +225,11 @@ export default function Sidebar({ sessionUser }: { sessionUser: SessionUser }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           Contabilidad
+          {aiAlertCount > 0 && (
+            <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[9px] font-bold text-white">
+              {aiAlertCount > 9 ? "9+" : aiAlertCount}
+            </span>
+          )}
         </Link>
       </nav>
 
