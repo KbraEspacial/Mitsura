@@ -241,6 +241,23 @@ export default function ContabilidadPage() {
                 la reemplaza.
               </p>
             )}
+            {summary && (summary.pendingIncome > 0 || summary.pendingExpense > 0) && (
+              <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
+                No suma al saldo:{" "}
+                {summary.pendingIncome > 0 && (
+                  <>
+                    <strong>{formatCurrency(summary.pendingIncome)}</strong> por recibir
+                  </>
+                )}
+                {summary.pendingIncome > 0 && summary.pendingExpense > 0 && " y "}
+                {summary.pendingExpense > 0 && (
+                  <>
+                    <strong>{formatCurrency(summary.pendingExpense)}</strong> por pagar
+                  </>
+                )}{" "}
+                con fecha futura.
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setReconcileOpen(false)}

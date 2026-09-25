@@ -22,6 +22,8 @@ export type FinanceSummary = {
   reconciliationDate: Date | null;
   /** Delta de movimientos posterior a la conciliación */
   movementsSinceReconciliation: number;
+  pendingIncome: number;
+  pendingExpense: number;
   /** Dinero real: línea base + movimientos */
   saldoReal: number;
 };
@@ -219,14 +221,31 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
 
   const base = lastReconciliation?.amount ?? 0;
   const since = lastReconciliation?.date ?? new Date(0);
+  const now = new Date();
+  // Solo cuentan los movimientos ya ocurridos: un ingreso con fecha futura
+  // (p. ej. la quincena del 30/09 generada antes de cobrar) todavia no esta
+  // en la cuenta y no debe alterar el saldo real.
   const movementsSince = records
     .filter((r) => r.excludeFromBalance === false)
-    .filter((r) => r.date > since)
+    .filter((r) => r.date > since && r.date <= now)
     .reduce((sum, r) => {
       if (r.type === "income") return sum + r.amount;
       if (r.type === "expense" || r.type === "debt_payment") return sum - r.amount;
       return sum;
     }, 0);
+
+  const pendingMovements = records
+    .filter((r) => r.excludeFromBalance === false)
+    .filter((r) => r.date > now)
+    .reduce(
+      (acc, r) => {
+        if (r.type === "income") return { ...acc, income: acc.income + r.amount };
+        if (r.type === "expense" || r.type === "debt_payment")
+          return { ...acc, expense: acc.expense + r.amount };
+        return acc;
+      },
+      { income: 0, expense: 0 },
+    );
 
   const debtPayments = records
     .filter((r) => r.type === "debt_payment")
@@ -250,6 +269,8 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
     reconciliationBase: base,
     reconciliationDate: lastReconciliation?.date ?? null,
     movementsSinceReconciliation: movementsSince,
+    pendingIncome: pendingMovements.income,
+    pendingExpense: pendingMovements.expense,
     saldoReal,
   };
 }
