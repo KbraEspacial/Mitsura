@@ -8,6 +8,7 @@ import {
   deleteFinanceRecord,
   getCategories,
   exportFinanceToCSV,
+  toggleExcludeFromBalance,
   type FinanceRecordData,
   type CategoryInfo,
 } from "@/lib/actions/finance";
@@ -19,6 +20,7 @@ type Record = {
   description: string;
   category: string | null;
   date: Date;
+  excludeFromBalance: boolean;
 };
 
 type RecordForm = {
@@ -77,6 +79,9 @@ export default function IngresosPage() {
   });
 
   const totalFiltered = filteredRecords.reduce((s, r) => s + r.amount, 0);
+  const totalCounted = filteredRecords
+    .filter((r) => !r.excludeFromBalance)
+    .reduce((s, r) => s + r.amount, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +119,14 @@ export default function IngresosPage() {
   const handleDelete = async (id: string) => {
     await deleteFinanceRecord(id);
     setRecords((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleToggleExclude = async (record: Record) => {
+    const next = !record.excludeFromBalance;
+    setRecords((prev) =>
+      prev.map((r) => (r.id === record.id ? { ...r, excludeFromBalance: next } : r)),
+    );
+    await toggleExcludeFromBalance(record.id, next);
   };
 
   const handleExport = async () => {
@@ -264,6 +277,11 @@ export default function IngresosPage() {
         )}
         <div className="ml-auto self-end text-xs text-muted-foreground">
           {filteredRecords.length} registros · total {formatCurrency(totalFiltered)}
+          {totalCounted !== totalFiltered && (
+            <span className="ml-1 text-emerald-600">
+              (cuentan {formatCurrency(totalCounted)})
+            </span>
+          )}
         </div>
       </div>
 
@@ -289,22 +307,50 @@ export default function IngresosPage() {
               filteredRecords.map((record) => (
                 <tr
                   key={record.id}
-                  className="border-b last:border-0 transition-colors hover:bg-emerald-50/40"
+                  className={`border-b transition-colors last:border-0 ${
+                    record.excludeFromBalance
+                      ? "bg-muted/30 hover:bg-muted/40"
+                      : "hover:bg-emerald-50/40 dark:hover:bg-emerald-500/5"
+                  }`}
                 >
                   <td className="px-5 py-3.5 text-muted-foreground">
                     {formatDate(record.date)}
                   </td>
                   <td className="px-5 py-3.5 font-medium text-foreground">
-                    {record.description}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {record.description}
+                      {record.excludeFromBalance && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          no cuenta en el saldo
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">
                     {record.category ?? "—"}
                   </td>
-                  <td className="px-5 py-3.5 font-semibold text-emerald-600">
+                  <td
+                    className={`px-5 py-3.5 font-semibold ${
+                      record.excludeFromBalance
+                        ? "text-muted-foreground line-through"
+                        : "text-emerald-600"
+                    }`}
+                  >
                     {formatCurrency(record.amount)}
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleToggleExclude(record)}
+                        title={
+                          record.excludeFromBalance
+                            ? "Contar en el saldo real"
+                            : "No contar en el saldo real"
+                        }
+                        className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        {record.excludeFromBalance ? "✓ Contar" : "⊘ Excluir"}
+                      </button>
                       <button
                         onClick={() => handleEdit(record)}
                         className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

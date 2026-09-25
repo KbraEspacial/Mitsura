@@ -2,14 +2,28 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { monthKey, currentMonthKey } from "@/lib/finance-utils";
 
 export type FinanceSummary = {
+  /** Suma de ingresos NO marcados como excludeFromBalance (histórico) */
   totalIncome: number;
   totalExpenses: number;
   totalFixedExpenses: number;
+  /** Alias de saldoReal. Se mantiene por compatibilidad con la UI y la IA. */
   balance: number;
   activeDebtsCount: number;
   totalDebtRemaining: number;
+  /** Ingresos excluidos por ser transferencias / préstamos / ingresos de terceros */
+  excludedIncome: number;
+  /** Abonos a deudas (type = "debt_payment") */
+  debtPayments: number;
+  /** Última línea base confirmada por el usuario */
+  reconciliationBase: number;
+  reconciliationDate: Date | null;
+  /** Delta de movimientos posterior a la conciliación */
+  movementsSinceReconciliation: number;
+  /** Dinero real: línea base + movimientos */
+  saldoReal: number;
 };
 
 export type FinanceRecordData = {
@@ -50,10 +64,10 @@ export type MonthlyRecord = {
   description: string;
   category: string | null;
   date: Date;
+  excludeFromBalance: boolean;
 };
 
-export type MonthlyDetail = {
-  month: string;
+export type MonthlyDetail = {  month: string;
   income: number;
   expenses: number;
   balance: number;
@@ -72,15 +86,15 @@ export async function getMonthlySummary(): Promise<MonthlySummary[]> {
 
   const records = await db.financeRecord.findMany({
     where: { userId: session.id },
-    select: { type: true, amount: true, date: true },
+    select: { type: true, amount: true, date: true, excludeFromBalance: true },
   });
 
   const monthlyMap: Record<string, { income: number; expenses: number }> = {};
 
   for (const r of records) {
-    const key = `${r.date.getUTCFullYear()}-${String(r.date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const key = monthKey(r.date);
     if (!monthlyMap[key]) monthlyMap[key] = { income: 0, expenses: 0 };
-    if (r.type === "income") monthlyMap[key].income += r.amount;
+    if (r.type === "income" && !r.excludeFromBalance) monthlyMap[key].income += r.amount;
     else if (r.type === "expense") monthlyMap[key].expenses += r.amount;
   }
 
@@ -100,17 +114,25 @@ export async function getMonthlyRecords(): Promise<MonthlyDetail[]> {
   const records = await db.financeRecord.findMany({
     where: { userId: session.id },
     orderBy: { date: "desc" },
-    select: { id: true, type: true, amount: true, description: true, category: true, date: true },
+    select: {
+      id: true,
+      type: true,
+      amount: true,
+      description: true,
+      category: true,
+      date: true,
+      excludeFromBalance: true,
+    },
   });
 
   const grouped: Record<string, MonthlyDetail> = {};
 
   for (const r of records) {
-    const key = `${r.date.getUTCFullYear()}-${String(r.date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const key = monthKey(r.date);
     if (!grouped[key]) {
       grouped[key] = { month: key, income: 0, expenses: 0, balance: 0, records: [] };
     }
-    if (r.type === "income") grouped[key].income += r.amount;
+    if (r.type === "income" && !r.excludeFromBalance) grouped[key].income += r.amount;
     else if (r.type === "expense") grouped[key].expenses += r.amount;
     grouped[key].records.push(r);
   }
@@ -123,18 +145,21 @@ export async function getMonthlyRecords(): Promise<MonthlyDetail[]> {
     }));
 }
 
-export async function getExpensesByCategory(): Promise<CategoryBreakdown[]> {
+export async function getExpensesByCategory(month?: string): Promise<CategoryBreakdown[]> {
   const session = await getSession();
   if (!session) return [];
 
+  const target = month ?? currentMonthKey();
+
   const expenses = await db.financeRecord.findMany({
     where: { userId: session.id, type: "expense" },
-    select: { category: true, amount: true },
+    select: { category: true, amount: true, date: true },
   });
 
   const categoryMap: Record<string, number> = {};
 
   for (const e of expenses) {
+    if (monthKey(e.date) !== target) continue;
     const cat = e.category || "Sin categoría";
     categoryMap[cat] = (categoryMap[cat] ?? 0) + e.amount;
   }
@@ -156,11 +181,11 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
 
   const records = await db.financeRecord.findMany({
     where: { userId: session.id },
-    select: { type: true, amount: true },
+    select: { type: true, amount: true, date: true, excludeFromBalance: true },
   });
 
   const totalIncome = records
-    .filter((r) => r.type === "income")
+    .filter((r) => r.type === "income" && !r.excludeFromBalance)
     .reduce((sum, r) => sum + r.amount, 0);
   const totalExpenses = records
     .filter((r) => r.type === "expense")
@@ -182,14 +207,85 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
     0,
   );
 
+  // --- Saldo real: línea base de conciliación + delta de movimientos ---
+  // Históricamente los "ingresos" incluían transferencias entre cuentas propias
+  // y préstamos recibidos, por lo que la suma bruta nunca cuadró con el dinero
+  // real. Se exclusieron vía `excludeFromBalance` sin tocar los registros.
+  const lastReconciliation = await db.balanceReconciliation.findFirst({
+    where: { userId: session.id },
+    orderBy: { date: "desc" },
+    select: { amount: true, date: true },
+  });
+
+  const base = lastReconciliation?.amount ?? 0;
+  const since = lastReconciliation?.date ?? new Date(0);
+  const movementsSince = records
+    .filter((r) => r.excludeFromBalance === false)
+    .filter((r) => r.date > since)
+    .reduce((sum, r) => {
+      if (r.type === "income") return sum + r.amount;
+      if (r.type === "expense" || r.type === "debt_payment") return sum - r.amount;
+      return sum;
+    }, 0);
+
+  const debtPayments = records
+    .filter((r) => r.type === "debt_payment")
+    .reduce((sum, r) => sum + r.amount, 0);
+
+  const excludedIncome = records
+    .filter((r) => r.type === "income" && r.excludeFromBalance)
+    .reduce((sum, r) => sum + r.amount, 0);
+
+  const saldoReal = base + movementsSince;
+
   return {
     totalIncome,
     totalExpenses,
     totalFixedExpenses,
-    balance: totalIncome - totalExpenses,
+    balance: saldoReal,
     activeDebtsCount,
     totalDebtRemaining,
+    excludedIncome,
+    debtPayments,
+    reconciliationBase: base,
+    reconciliationDate: lastReconciliation?.date ?? null,
+    movementsSinceReconciliation: movementsSince,
+    saldoReal,
   };
+}
+
+/** Marca / desmarca un registro para que no cuente en el saldo real. */
+export async function toggleExcludeFromBalance(id: string, exclude: boolean) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+
+  await db.financeRecord.updateMany({
+    where: { id, userId: session.id },
+    data: { excludeFromBalance: exclude },
+  });
+}
+
+/** Registra la línea base del saldo: "tengo $X hoy". */
+export async function reconcileBalance(amount: number, date?: Date, note?: string) {
+  const session = await getSession();
+  if (!session) throw new Error("No autenticado");
+
+  if (!Number.isFinite(amount)) throw new Error("Monto inválido");
+
+  return db.balanceReconciliation.create({
+    data: { amount, date: date ?? new Date(), note, userId: session.id },
+  });
+}
+
+export async function getReconciliations(limit = 20) {
+  const session = await getSession();
+  if (!session) return [];
+
+  return db.balanceReconciliation.findMany({
+    where: { userId: session.id },
+    orderBy: { date: "desc" },
+    take: limit,
+  });
 }
 
 export async function getFinanceRecords(type?: string) {
@@ -428,13 +524,17 @@ export async function getFinanceAdvice(summary: FinanceSummary): Promise<{
     : 1;
   const hasDebts = summary.activeDebtsCount > 0;
 
+  // Flujo del período: ingresos reales - gastos - abonos a deudas.
+  // No es lo mismo que el saldo actual (la plata que tienes en el bolsillo).
+  const flujoNeto = summary.totalIncome - summary.totalExpenses - summary.debtPayments;
+
   let resumen: string;
-  if (summary.balance > 0) {
-    resumen = `Tus finanzas están en positivo. Ingresaste ${formatForAdvice(summary.totalIncome)} y gastaste ${formatForAdvice(summary.totalExpenses)}, generando un superávit de ${formatForAdvice(summary.balance)}.`;
-  } else if (summary.balance === 0) {
-    resumen = `Tus finanzas están equilibradas. Ingresaste y gastaste exactamente ${formatForAdvice(summary.totalIncome)}.`;
+  if (flujoNeto > 0) {
+    resumen = `Ingresaste ${formatForAdvice(summary.totalIncome)} y gastaste ${formatForAdvice(summary.totalExpenses)}, dejando un superávit de ${formatForAdvice(flujoNeto)}. Tu saldo real actual es de ${formatForAdvice(summary.saldoReal)}.`;
+  } else if (flujoNeto === 0) {
+    resumen = `Tus finanzas están equilibradas: ingresaste y gastaste exactamente ${formatForAdvice(summary.totalIncome)}. Tu saldo real actual es de ${formatForAdvice(summary.saldoReal)}.`;
   } else {
-    resumen = `Tus finanzas están en negativo. Ingresaste ${formatForAdvice(summary.totalIncome)} pero gastaste ${formatForAdvice(summary.totalExpenses)}, generando un déficit de ${formatForAdvice(Math.abs(summary.balance))}.`;
+    resumen = `Ingresaste ${formatForAdvice(summary.totalIncome)} pero gastaste ${formatForAdvice(summary.totalExpenses)}, generando un déficit de ${formatForAdvice(Math.abs(flujoNeto))}. Tu saldo real actual es de ${formatForAdvice(summary.saldoReal)}.`;
   }
 
   const recomendaciones: string[] = [];
@@ -442,6 +542,12 @@ export async function getFinanceAdvice(summary: FinanceSummary): Promise<{
     recomendaciones.push("Tus gastos representan más del 70% de tus ingresos. Considera reducir gastos discrecionales para mejorar tu margen de ahorro.");
   } else {
     recomendaciones.push("Mantienes una buena relación ingresos/gastos. Sigue así y considera aumentar tu porcentaje de ahorro.");
+  }
+  if (summary.saldoReal < 0) {
+    recomendaciones.push("Tu saldo real es negativo. Concilia tu cuenta en la sección Resumen para que el cálculo vuelva a reflejar la realidad.");
+  }
+  if (summary.excludedIncome > 0) {
+    recomendaciones.push(`Hay ${formatForAdvice(summary.excludedIncome)} registrados como ingresos que en realidad son transferencias, préstamos o ingresos de terceros. No cuentan como sueldo.`);
   }
   if (summary.totalFixedExpenses > 0) {
     recomendaciones.push(`Tienes ${formatForAdvice(summary.totalFixedExpenses)} en gastos fijos mensuales. Revisa si puedes negociar mejores tarifas en servicios o suscripciones.`);
@@ -452,7 +558,7 @@ export async function getFinanceAdvice(summary: FinanceSummary): Promise<{
   recomendaciones.push("Establece un fondo de emergencia equivalente a 3-6 meses de tus gastos fijos.");
 
   const alertas: string[] = [];
-  if (summary.balance < 0) {
+  if (flujoNeto < 0) {
     alertas.push("Estás gastando más de lo que ingresas. Esto es insostenible a largo plazo. Revisa tu presupuesto urgentemente.");
   }
   if (hasDebts && summary.totalDebtRemaining > summary.totalIncome * 0.5) {
@@ -460,6 +566,9 @@ export async function getFinanceAdvice(summary: FinanceSummary): Promise<{
   }
   if (summary.totalFixedExpenses > summary.totalIncome * 0.5) {
     alertas.push("Tus gastos fijos superan el 50% de tus ingresos, lo que limita tu capacidad de ahorro e inversión.");
+  }
+  if (summary.saldoReal < 0) {
+    alertas.push(`Tu saldo real es negativo (${formatForAdvice(summary.saldoReal)}). Concilia tu cuenta para corregir el cálculo.`);
   }
   if (alertas.length === 0) {
     alertas.push("No se detectan alertas críticas. Tus finanzas están bajo control.");

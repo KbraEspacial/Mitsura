@@ -28,6 +28,10 @@ model User {
   fixedExpenses  FixedExpense[]
   debts          Debt[]
   aiAlerts       AiAlert[]
+  incomeSources     IncomeSource[]
+  reconciliations   BalanceReconciliation[]
+  lifeAreas         LifeArea[]
+  categoryAreas     CategoryArea[]
 }
 
 model Board {
@@ -135,12 +139,93 @@ model FinanceRecord {
   date        DateTime @default(now())
   isRecurring Boolean  @default(false)
 
+  /// No cuenta para el cálculo del saldo real (transferencias entre tus
+  /// cuentas, préstamos recibidos, cobros deDebt, ingresos de terceros).
+  /// Solo es una marca: no altera monto, fecha ni descripción.
+  excludeFromBalance Boolean @default(false)
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
   debtId String?
   debt   Debt?  @relation(fields: [debtId], references: [id])
+
+  sourceId String?
+  source   IncomeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 }
+
+/// Línea base del saldo. El usuario confirma cuánto dinero tiene realmente y
+/// desde esa fecha la app calcula el saldo por delta de movimientos.
+model BalanceReconciliation {
+  id     String   @id @default(cuid())
+  amount Float
+  date   DateTime @default(now())
+  note   String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date(sort: Desc)])
+}
+
+/// Configurador de sueldo: fuentes de ingreso recurrentes.
+model IncomeSource {
+  id          String  @id @default(cuid())
+  name        String
+  amount      Float
+  /// "monthly" | "biweekly" | "weekly"
+  frequency   String  @default("biweekly")
+  dayOfMonth  Int     @default(1)
+  /// Segundo día de cobro cuando frequency = "biweekly"
+  secondDay   Int?
+  category    String?
+  isActive    Boolean @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  records FinanceRecord[]
+
+  @@index([userId, isActive])
+}
+
+/// Áreas de vida (Alimentación, Transporte, Salud...) con presupuesto mensual.
+model LifeArea {
+  id            String   @id @default(cuid())
+  name          String
+  emoji         String?
+  /// token de color seguro para Tailwind (ej: "emerald", "amber")
+  color         String?
+  monthlyBudget Float    @default(0)
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categories CategoryArea[]
+
+  @@unique([userId, name])
+}
+
+/// Mapea una categoría de FinanceRecord / FixedExpense a un área de vida.
+model CategoryArea {
+  id       String @id @default(cuid())
+  category String
+  areaId   String
+
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area   LifeArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+}
+
 
 model FixedExpense {
   id          String   @id @default(cuid())

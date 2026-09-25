@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   getFinanceSummary,
   getMonthlySummary,
   getMonthlyRecords,
   getFinanceAdvice,
+  reconcileBalance,
   type FinanceSummary,
   type MonthlySummary,
   type MonthlyDetail,
@@ -44,22 +45,49 @@ export default function ContabilidadPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [notifOpen, setNotifOpen] = useState(false);
   const [aiAlerts, setAiAlerts] = useState<AiAlertInfo[]>([]);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileAmount, setReconcileAmount] = useState("");
+  const [reconcileNote, setReconcileNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const loadSummary = useCallback(async () => {
+    const s = await getFinanceSummary();
+    setSummary(s);
+    getFinanceAdvice(s).then((r) => setAlerts(r.alertas));
+  }, []);
 
   useEffect(() => {
-    getFinanceSummary().then((s) => {
-      setSummary(s);
-      getFinanceAdvice(s).then((r) => setAlerts(r.alertas));
-    });
+    loadSummary();
     getMonthlySummary().then(setMonthly);
     getMonthlyRecords().then(setMonthlyDetails);
     getActiveAIAlerts().then(setAiAlerts);
-  }, []);
+  }, [loadSummary]);
+
+  async function handleReconcile() {
+    const amount = Number(reconcileAmount.replace(/[^0-9.-]/g, ""));
+    if (!Number.isFinite(amount)) {
+      setToast("Escribe un monto válido");
+      return;
+    }
+    setSaving(true);
+    try {
+      await reconcileBalance(amount, new Date(), reconcileNote.trim() || undefined);
+      await loadSummary();
+      setReconcileOpen(false);
+      setReconcileNote("");
+      setToast(`Saldo conciliado en ${formatCurrency(amount)}`);
+    } catch {
+      setToast("No se pudo guardar la conciliación");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const monthData = monthlyDetails.find((m) => m.month === selectedMonth);
 
   const monthIncome = monthData ? monthData.income : 0;
   const monthExpenses = monthData ? monthData.expenses : 0;
-  const monthBalance = monthData ? monthData.balance : 0;
 
   const monthCategories = useMemo(() => {
     const expenseRecords = monthData?.records.filter((r) => r.type === "expense") ?? [];
@@ -168,6 +196,79 @@ export default function ContabilidadPage() {
         </div>
       )}
 
+      {/* Reconciliation modal */}
+      {reconcileOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setReconcileOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl"
+          >
+            <h3 className="text-lg font-bold text-foreground">Conciliar saldo</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              ¿Cuánta plata tienes hoy realmente? La app toma este monto como línea base
+              y de aquí en adelante suma y resta cada movimiento para que el saldo nunca
+              se descuadre.
+            </p>
+            <label className="mt-4 block text-xs font-medium text-foreground">
+              Saldo real actual
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              value={reconcileAmount}
+              onChange={(e) => setReconcileAmount(e.target.value)}
+              placeholder="110900"
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+            <label className="mt-3 block text-xs font-medium text-foreground">
+              Nota (opcional)
+            </label>
+            <input
+              type="text"
+              value={reconcileNote}
+              onChange={(e) => setReconcileNote(e.target.value)}
+              placeholder="Saldo real del banco"
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+            {summary && summary.reconciliationDate && (
+              <p className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+                Última conciliación: {formatCurrency(summary.reconciliationBase)} del{" "}
+                {new Date(summary.reconciliationDate).toLocaleDateString("es-CO")}. La nueva
+                la reemplaza.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setReconcileOpen(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleReconcile}
+                disabled={saving}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-foreground px-4 py-3 text-xs font-medium text-background shadow-lg">
+          {toast}
+          <button onClick={() => setToast(null)} className="ml-3 opacity-70 hover:opacity-100">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Title row with controls */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -226,20 +327,31 @@ export default function ContabilidadPage() {
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
-          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${summary.balance >= 0 ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"}`}>
+          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${summary.balance >= 0 ? "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400" : "bg-red-100 text-red-500 dark:bg-red-500/20 dark:text-red-400"}`}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
             </svg>
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Balance disponible
+              Saldo real
             </p>
-            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600" : "text-red-500"}`}>{formatCurrency(summary.balance)}</p>
-            <p className={`mt-0.5 text-[11px] ${monthBalance >= 0 ? "text-emerald-600/70" : "text-red-500/70"}`}>
-              Este mes: {formatCurrency(monthBalance)}
+            <p className={`mt-0.5 text-xl font-bold ${summary.balance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-500 dark:text-red-400"}`}>{formatCurrency(summary.balance)}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+              {summary.reconciliationDate
+                ? `Conciliado el ${new Date(summary.reconciliationDate).toLocaleDateString("es-CO")}`
+                : "Sin conciliar · el saldo no es confiable"}
             </p>
           </div>
+          <button
+            onClick={() => {
+              setReconcileAmount(String(summary.balance));
+              setReconcileOpen(true);
+            }}
+            className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Conciliar
+          </button>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
@@ -256,6 +368,21 @@ export default function ContabilidadPage() {
           </div>
         </div>
       </div>
+
+      {/* Excluded income explainer */}
+      {summary && summary.excludedIncome > 0 && (
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            <strong>{formatCurrency(summary.excludedIncome)}</strong> están marcados como{" "}
+            <em>no ingreso</em> (transferencias entre tus cuentas, préstamos y pagos de
+            terceros). No suman a tu saldo. Podés ajustarlo en{" "}
+            <Link href="/contabilidad/ingresos" className="underline">
+              Ingresos
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {/* Charts row */}
       <div className="mb-8 grid gap-4 lg:grid-cols-2">

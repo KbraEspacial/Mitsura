@@ -7,6 +7,8 @@ const tabs = [
   { href: "/contabilidad", label: "Resumen" },
   { href: "/contabilidad/ingresos", label: "Ingresos" },
   { href: "/contabilidad/gastos", label: "Gastos" },
+  { href: "/contabilidad/sueldo", label: "Sueldo" },
+  { href: "/contabilidad/areas", label: "Áreas" },
   { href: "/contabilidad/gastos-fijos", label: "Gastos fijos" },
   { href: "/contabilidad/deudas", label: "Deudas" },
   { href: "/contabilidad/ia", label: "Asistente IA" },
