@@ -10,11 +10,10 @@ export function getAiMode(): AiMode {
   return process.env.GEMINI_API_KEY ? "gemini" : "rules";
 }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/" +
-  GEMINI_MODEL +
-  ":generateContent";
+// Lista en orden de preferencia: se prueban en cascada si una falla o no tiene
+// capacidad. El alias "-latest" se actualiza solo y evita que un modelo
+// retirado (como 2.5-flash para cuentas nuevas) rompa la app.
+const GEMINI_MODELS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-flash"];
 
 export type ChatTurn = { role: "user" | "model"; content: string };
 
@@ -211,24 +210,59 @@ async function geminiRequest(
   contents: { role: "user" | "model"; parts: { text: string }[] }[],
 ): Promise<string> {
   const key = process.env.GEMINI_API_KEY!;
-  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents,
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Gemini API error ${res.status}: ${body.slice(0, 200)}`);
+  const errores: string[] = [];
+
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+
+    for (let intento = 1; intento <= 3; intento++) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents,
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+        }),
+      });
+
+      // 429/503 = capacidad o cuota momentanea: reintenta con espera corta
+      if (res.status === 429 || res.status === 503) {
+        if (intento < 3) {
+          await new Promise((r) => setTimeout(r, 1200 * intento));
+          continue;
+        }
+        errores.push(`${model}: ${res.status} sin capacidad`);
+        break;
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        errores.push(`${model}: ${res.status} ${body.slice(0, 120)}`);
+        break;
+      }
+
+      const data = await res.json();
+      if (data?.promptFeedback?.blockReason) {
+        throw new Error("La consulta fue bloqueada por el filtro de seguridad de Gemini.");
+      }
+      // Descarta partes de razonamiento (thought) de los modelos 3.x
+      const partes = (data?.candidates?.[0]?.content?.parts ?? []) as {
+        text?: string;
+        thought?: boolean;
+      }[];
+      const texto = partes
+        .filter((p) => !p.thought && typeof p.text === "string")
+        .map((p) => p.text)
+        .join("")
+        .trim();
+      if (texto) return texto;
+      errores.push(`${model}: respuesta vacia`);
+      break;
+    }
   }
-  const data = await res.json();
-  return (
-    data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ??
-    "No pude generar una respuesta. Intenta de nuevo."
-  );
+
+  throw new Error(`Gemini no respondio. ${errores.join(" | ")}`);
 }
 
 export async function runGeminiChat(
