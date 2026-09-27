@@ -10,6 +10,7 @@ import {
   askFinanceAI,
   getAiModeAction,
 } from "@/lib/actions/ai";
+import MitsuraConciliacion from "@/components/MitsuraConciliacion";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
@@ -52,6 +53,14 @@ export default function IaPage() {
       setBusy(false);
     });
   }, []);
+
+  /** Vuelve a pedir el resumen y el analisis tras aplicar una conciliacion. */
+  const recargar = () => {
+    getFinanceSummary().then((s) => {
+      setSummary(s);
+      getFinanceAdvice(s).then(setAdvice);
+    });
+  };
 
   const send = async (text: string) => {
     const q = text.trim();
@@ -190,6 +199,14 @@ export default function IaPage() {
         <div className="rounded-lg bg-background/80 p-4 text-sm leading-relaxed text-foreground shadow-sm">
           {advice?.resumen}
         </div>
+      </div>
+
+      {/* Conciliacion */}
+      <div className="mb-6">
+        <MitsuraConciliacion
+          saldoReal={summary!.balance}
+          onListo={recargar}
+        />
       </div>
 
       <div className="mb-6">

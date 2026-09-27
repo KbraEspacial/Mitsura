@@ -73,7 +73,7 @@ export async function runReconcileAgent(): Promise<ReconcileReport> {
     reconciliationDate: summary.reconciliationDate,
     findings,
     agentComment: null,
-    agentAvailable: Boolean(process.env.GEMINI_API_KEY),
+    agentAvailable: Boolean(process.env.NVIDIA_API_KEY || process.env.GEMINI_API_KEY),
   };
 
   if (!report.agentAvailable || findings.length === 0) return report;

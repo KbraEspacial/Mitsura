@@ -19,7 +19,6 @@ import {
   type AiAlertInfo,
 } from "@/lib/actions/ai";
 import { runReconcileAgent, type ReconcileReport } from "@/lib/actions/reconcile-agent";
-import ConciliacionAutomatica from "@/components/ConciliacionAutomatica";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
@@ -477,10 +476,6 @@ export default function ContabilidadPage() {
             >
               Conciliar
             </button>
-            <ConciliacionAutomatica
-              saldoRealActual={summary.balance}
-              onListo={loadSummary}
-            />
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
