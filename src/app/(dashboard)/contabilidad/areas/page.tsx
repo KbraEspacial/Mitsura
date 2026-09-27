@@ -3,10 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   getAreaSpending,
+  getAreaHistory,
+  getBudgetOverview,
   getUnmappedCategories,
   getCategoryMappings,
   createLifeArea,
   setAreaBudget,
+  setMonthlyTotal,
   deleteLifeArea,
   assignCategory,
   type AreaSpending,
@@ -15,6 +18,13 @@ import { currentMonthKey, monthLabel, shiftMonth } from "@/lib/finance-utils";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
+
+/** Versión corta para tablas: 1.234.567 -> "1,23M" */
+const compactCurrency = (amount: number) => {
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1).replace(".0", "").replace(".", ",")}M`;
+  if (amount >= 1_000) return `${Math.round(amount / 1_000)}k`;
+  return String(amount);
+};
 
 /** Paleta segura para Tailwind (clases completas, no dinámicas). */
 const BAR_TONES: Record<string, string> = {
@@ -36,6 +46,8 @@ const EMOJI_CHOICES = ["🍔", "🚌", "🏠", "💡", "🏥", "🎬", "💼", "
 
 type Mappings = Record<string, string>;
 
+type Overview = Awaited<ReturnType<typeof getBudgetOverview>>;
+
 export default function AreasPage() {
   const [areas, setAreas] = useState<AreaSpending[]>([]);
   const [unmapped, setUnmapped] = useState<{ category: string; amount: number }[]>([]);
@@ -46,14 +58,23 @@ export default function AreasPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "err" } | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof getAreaHistory>> | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  /** input del tope total; null mientras no se está editando */
+  const [totalInput, setTotalInput] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [spending, unmappedCats, mappingsList] = await Promise.all([
+    const [spending, overviewData, hist, unmappedCats, mappingsList] = await Promise.all([
       getAreaSpending(month),
+      getBudgetOverview(month),
+      getAreaHistory(6),
       getUnmappedCategories(),
       getCategoryMappings(),
     ]);
     setAreas(spending);
+    setOverview(overviewData);
+    setHistory(hist);
     setUnmapped(unmappedCats);
     setMappings(
       mappingsList.reduce<Mappings>((acc, m) => {
@@ -67,25 +88,26 @@ export default function AreasPage() {
     load();
   }, [load]);
 
-  const overview = getBudgetOverviewLocal(areas);
-
-  function getBudgetOverviewLocal(list: AreaSpending[]) {
-    const withBudget = list.filter((a) => a.monthlyBudget > 0);
-    const totalBudget = withBudget.reduce((s, a) => s + a.monthlyBudget, 0);
-    const totalSpent = withBudget.reduce((s, a) => s + a.spent, 0);
-    return {
-      totalBudget,
-      totalSpent,
-      totalRemaining: totalBudget - totalSpent,
-      ratio: totalBudget > 0 ? totalSpent / totalBudget : 0,
-      count: withBudget.length,
-      overCount: withBudget.filter((a) => a.overBudget).length,
-    };
-  }
+  const count = areas.filter((a) => a.monthlyBudget > 0).length;
+  const overCount = areas.filter((a) => a.overBudget).length;
 
   function notify(msg: string, kind: "ok" | "err" = "ok") {
     setToast({ msg, kind });
     setTimeout(() => setToast(null), 4000);
+  }
+
+  /** Guarda el tope de gasto del mes. Vacío o 0 = sin tope. */
+  async function saveTotal() {
+    if (totalInput === null) return;
+    const value = Number(totalInput.replace(/[^0-9.]/g, "")) || 0;
+    setTotalInput(null);
+    try {
+      await setMonthlyTotal(month, value);
+      notify(value > 0 ? `Tope de ${monthLabel(month)}: ${formatCurrency(value)}` : "Tope eliminado");
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Error", "err");
+    }
   }
 
   async function saveBudget(area: AreaSpending) {
@@ -170,53 +192,140 @@ export default function AreasPage() {
         </div>
       </div>
 
-      {/* Resumen global */}
+      {/* Resumen global: tope total del mes + reparto entre areas */}
       <div className="mb-6 rounded-xl border border-border bg-background p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Presupuesto total
+              Presupuesto total de {monthLabel(month)}
             </p>
-            <p className="mt-1 text-2xl font-bold text-foreground">
-              {formatCurrency(overview.totalBudget)}
-            </p>
+            {totalInput === null ? (
+              <button
+                onClick={() =>
+                  setTotalInput(overview && overview.plannedTotal > 0 ? String(overview.plannedTotal) : "")
+                }
+                className="group mt-1 flex items-center gap-2 text-left"
+                title="Definir el tope de gasto del mes"
+              >
+                <span className="text-2xl font-bold text-foreground">
+                  {overview && overview.plannedTotal > 0
+                    ? formatCurrency(overview.plannedTotal)
+                    : "Sin tope"}
+                </span>
+                <span className="text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                  editar
+                </span>
+              </button>
+            ) : (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={totalInput}
+                  onChange={(e) => setTotalInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveTotal();
+                    if (e.key === "Escape") setTotalInput(null);
+                  }}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="w-40 rounded-lg border border-border bg-background px-2.5 py-1 text-2xl font-bold text-foreground outline-none focus:border-foreground/40"
+                />
+                <button
+                  onClick={saveTotal}
+                  className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+                >
+                  Guardar
+                </button>
+                <button
+                  onClick={() => setTotalInput(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+            {overview && overview.plannedTotal > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {overview.unallocated > 0
+                  ? `Faltan ${formatCurrency(overview.unallocated)} por repartir entre las áreas`
+                  : overview.unallocated < 0
+                    ? `Las áreas suman ${formatCurrency(Math.abs(overview.unallocated))} más que tu tope`
+                    : "Todo el tope está repartido entre las áreas"}
+              </p>
+            )}
           </div>
+
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Gastado</p>
-            <p className="text-lg font-bold text-red-500">{formatCurrency(overview.totalSpent)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">
-              {overview.totalRemaining >= 0 ? "Te queda" : "Te excediste"}
+            <p className="text-xs text-muted-foreground">Gastado real</p>
+            <p className="text-lg font-bold text-red-500">
+              {formatCurrency(overview?.spentReal ?? 0)}
             </p>
-            <p
-              className={`text-lg font-bold ${
-                overview.totalRemaining >= 0
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-red-500"
-              }`}
-            >
-              {formatCurrency(Math.abs(overview.totalRemaining))}
-            </p>
+            {overview && overview.unassignedSpent > 0 && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                incluye {formatCurrency(overview.unassignedSpent)} sin área asignada
+              </p>
+            )}
           </div>
-          {overview.overCount > 0 && (
+
+          {overview && overview.plannedTotal > 0 ? (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                {overview.remainingVsPlan >= 0 ? "Te queda" : "Te excediste"}
+              </p>
+              <p
+                className={`text-lg font-bold ${
+                  overview.remainingVsPlan >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-500"
+                }`}
+              >
+                {formatCurrency(Math.abs(overview.remainingVsPlan))}
+              </p>
+            </div>
+          ) : (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                {overview && overview.totalRemaining >= 0 ? "Te queda" : "Te excediste"}
+              </p>
+              <p
+                className={`text-lg font-bold ${
+                  overview && overview.totalRemaining >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-500"
+                }`}
+              >
+                {formatCurrency(Math.abs(overview?.totalRemaining ?? 0))}
+              </p>
+            </div>
+          )}
+
+          {overCount > 0 && (
             <span className="rounded-full bg-red-100 px-3 py-1 text-[11px] font-medium text-red-700 dark:bg-red-500/20 dark:text-red-400">
-              {overview.overCount} área(s) excedida(s)
+              {overCount} área(s) excedida(s)
             </span>
           )}
         </div>
+
         <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-muted">
           <div
             className={`h-full rounded-full transition-all ${
-              overview.ratio > 1 ? "bg-red-500" : overview.ratio > 0.8 ? "bg-amber-500" : "bg-emerald-500"
+              (overview?.planRatio ?? 0) > 1
+                ? "bg-red-500"
+                : (overview?.planRatio ?? 0) > 0.8
+                  ? "bg-amber-500"
+                  : "bg-emerald-500"
             }`}
-            style={{ width: `${Math.min(100, overview.ratio * 100)}%` }}
+            style={{
+              width: `${Math.min(100, (overview?.planRatio ?? overview?.ratio ?? 0) * 100)}%`,
+            }}
           />
         </div>
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {overview.count > 0
-            ? `${Math.round(overview.ratio * 100)}% de ${overview.count} áreas con presupuesto`
-            : "Todavía no definiste presupuestos"}
+          {overview && overview.plannedTotal > 0
+            ? `${Math.round(overview.planRatio * 100)}% del tope de ${monthLabel(month)}`
+            : count > 0
+              ? `${Math.round((overview?.ratio ?? 0) * 100)}% de ${count} áreas con presupuesto (sin tope general)`
+              : "Define un tope o ponle presupuesto a tus áreas"}
         </p>
       </div>
 
@@ -373,6 +482,116 @@ export default function AreasPage() {
           Crear área
         </button>
       </form>
+
+      {/* Resumen mensual por área */}
+      <div className="mb-6 rounded-xl border border-border bg-background shadow-sm">
+        <button
+          onClick={() => setShowHistory((v) => !v)}
+          className="flex w-full items-center justify-between px-5 py-4 text-left"
+        >
+          <div>
+            <h3 className="text-sm font-semibold">Resumen mensual por área</h3>
+            <p className="text-[11px] text-muted-foreground">
+              Los últimos {history?.months.length ?? 0} meses, para ver qué áreas crecen y cuáles ya no gastas
+            </p>
+          </div>
+          <span className="text-muted-foreground">{showHistory ? "−" : "+"}</span>
+        </button>
+
+        {showHistory && (
+          <div className="border-t border-border px-5 py-4">
+            {!history || history.areas.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                Todavía no hay historial suficiente.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Área</th>
+                      {history.months.map((m) => (
+                        <th key={m} className="px-2 py-2 text-right font-medium">
+                          {monthLabel(m).split(" ")[0]?.slice(0, 3)}
+                        </th>
+                      ))}
+                      <th className="px-2 py-2 text-right font-medium">Promedio</th>
+                      <th className="px-2 py-2 text-right font-medium">vs. presupuesto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.areas.map((a) => {
+                      const diff = a.monthlyBudget - a.average;
+                      return (
+                        <tr key={a.id} className="border-b border-border/50 last:border-0">
+                          <td className="py-2 pr-3 text-foreground">
+                            {a.emoji} {a.name}
+                          </td>
+                          {a.series.map((s) => {
+                            const over = a.monthlyBudget > 0 && s.amount > a.monthlyBudget;
+                            return (
+                              <td
+                                key={s.month}
+                                className={`px-2 py-2 text-right ${
+                                  s.amount === 0
+                                    ? "text-muted-foreground/50"
+                                    : over
+                                      ? "text-red-500"
+                                      : "text-foreground"
+                                }`}
+                              >
+                                {s.amount === 0 ? "—" : compactCurrency(s.amount)}
+                              </td>
+                            );
+                          })}
+                          <td className="px-2 py-2 text-right text-muted-foreground">
+                            {a.average > 0 ? compactCurrency(a.average) : "—"}
+                          </td>
+                          <td
+                            className={`px-2 py-2 text-right ${
+                              a.monthlyBudget <= 0
+                                ? "text-muted-foreground"
+                                : diff >= 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-red-500"
+                            }`}
+                          >
+                            {a.monthlyBudget <= 0
+                              ? "sin tope"
+                              : `${diff >= 0 ? "−" : "+"}${compactCurrency(Math.abs(diff))}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t border-border font-medium">
+                      <td className="py-2 pr-3 text-muted-foreground">Sin área</td>
+                      {history.unassignedByMonth.map((u) => (
+                        <td key={u.month} className="px-2 py-2 text-right text-amber-600 dark:text-amber-400">
+                          {u.amount === 0 ? "—" : compactCurrency(u.amount)}
+                        </td>
+                      ))}
+                      <td className="px-2 py-2 text-right text-muted-foreground">
+                        {(() => {
+                          const withS = history.unassignedByMonth.filter((u) => u.amount > 0);
+                          if (withS.length === 0) return "—";
+                          return compactCurrency(
+                            withS.reduce((s, u) => s + u.amount, 0) / withS.length,
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  El promedio solo cuenta los meses en que sí gastaste, para que un mes sin gasto no te baje
+                  la referencia. En rojo, el mes que pasó el presupuesto de esa área.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Mapeo de categorías */}
       <div className="rounded-xl border border-border bg-background shadow-sm">

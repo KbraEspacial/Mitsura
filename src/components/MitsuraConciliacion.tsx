@@ -20,6 +20,11 @@ import {
   applyStatement,
   type PreviewConciliacion,
 } from "@/lib/actions/auto-reconcile";
+import {
+  getFinanceProposals,
+  applyFinanceProposal,
+  type Proposal,
+} from "@/lib/actions/finance-proposals";
 
 const fmt = (n: number) =>
   n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -41,7 +46,15 @@ export default function MitsuraConciliacion({
   saldoReal: number;
   onListo: () => void;
 }) {
-  const [pestana, setPestana] = useState<"agente" | "banco">("banco");
+  const [pestana, setPestana] = useState<"agente" | "banco" | "propuestas">("banco");
+
+  // --- Propuestas de mejora ---
+  const [propuestas, setPropuestas] = useState<Proposal[]>([]);
+  const [cargandoPropuestas, setCargandoPropuestas] = useState(false);
+  const [aplicandoId, setAplicandoId] = useState<string | null>(null);
+  const [errorPropuesta, setErrorPropuesta] = useState<string | null>(null);
+
+  const propuestasAccionables = propuestas.filter((p) => p.actionable).length;
 
   // --- Agente ---
   const [reporte, setReporte] = useState<ReconcileReport | null>(null);
@@ -129,8 +142,39 @@ export default function MitsuraConciliacion({
       return next;
     });
 
+  const cargarPropuestas = async () => {
+    setCargandoPropuestas(true);
+    setErrorPropuesta(null);
+    try {
+      setPropuestas(await getFinanceProposals());
+    } catch (e) {
+      setErrorPropuesta(e instanceof Error ? e.message : "No se pudieron cargar");
+    } finally {
+      setCargandoPropuestas(false);
+    }
+  };
+
+  const aplicarPropuesta = async (id: string) => {
+    setAplicandoId(id);
+    setErrorPropuesta(null);
+    try {
+      const r = await applyFinanceProposal(id);
+      if (!r.ok) {
+        setErrorPropuesta(r.message);
+        return;
+      }
+      // la propuesta ya no aplica: recargamos la lista
+      setPropuestas(await getFinanceProposals());
+      onListo();
+    } catch (e) {
+      setErrorPropuesta(e instanceof Error ? e.message : "No se pudo aplicar");
+    } finally {
+      setAplicandoId(null);
+    }
+  };
+
   const tab = (
-    id: "agente" | "banco",
+    id: "agente" | "banco" | "propuestas",
     texto: string,
   ) => (
     <button
@@ -142,6 +186,11 @@ export default function MitsuraConciliacion({
       }`}
     >
       {texto}
+      {id === "propuestas" && propuestasAccionables > 0 && (
+        <span className="ml-1.5 rounded-full bg-indigo-500 px-1.5 py-0.5 text-[10px] text-white">
+          {propuestasAccionables}
+        </span>
+      )}
     </button>
   );
 
@@ -157,10 +206,71 @@ export default function MitsuraConciliacion({
         <div className="flex gap-1 rounded-lg bg-background/60 p-1">
           {tab("banco", "Con el banco")}
           {tab("agente", "Revisar registros")}
+          {tab("propuestas", "Mejoras")}
         </div>
       </div>
 
-      {pestana === "banco" ? (
+      {pestana === "propuestas" ? (
+        <div className="space-y-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Cambios concretos que mecejoran tus presupuestos. Cada uno es un cambio real en tus datos, asi
+            que solo se aplica cuando lo apruebas tu.
+          </p>
+
+          {errorPropuesta && (
+            <p className="rounded-lg bg-red-500/10 px-3.5 py-2.5 text-xs text-red-700 dark:text-red-400">
+              {errorPropuesta}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cargarPropuestas}
+              disabled={cargandoPropuestas}
+              className="rounded-lg bg-foreground px-3.5 py-2 text-xs font-medium text-background disabled:opacity-50"
+            >
+              {cargandoPropuestas ? "Analizando..." : "Buscar mejoras"}
+            </button>
+            {propuestas.length > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                {propuestas.filter((p) => p.actionable).length} se pueden aplicar, {propuestas.length - propuestas.filter((p) => p.actionable).length} son solo consejo
+              </span>
+            )}
+          </div>
+
+          {propuestas.length > 0 && (
+            <div className="space-y-2">
+              {propuestas.map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-lg border border-border bg-background/70 p-3.5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-foreground">{p.title}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{p.detail}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-foreground/80">{p.impact}</p>
+                    </div>
+                    {p.actionable ? (
+                      <button
+                        onClick={() => aplicarPropuesta(p.id)}
+                        disabled={aplicandoId === p.id}
+                        className="shrink-0 rounded-lg border border-indigo-300 bg-background px-3 py-1.5 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                      >
+                        {aplicandoId === p.id ? "Aplicando..." : "Aplicar"}
+                      </button>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[10px] text-muted-foreground">
+                        Consejo
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : pestana === "banco" ? (
         <div className="space-y-3">
           <p className="text-xs leading-relaxed text-muted-foreground">
             Copia los movimientos desde la app de tu banco y pega aqui el saldo que te reporta. Yo los

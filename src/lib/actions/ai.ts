@@ -145,7 +145,64 @@ function detectRuleAlerts(ctx: FinanceContext): DetectedAlert[] {
     });
   }
 
+  // --- Presupuestos por área -----------------------------------------------
+
+  const b = ctx.budgets;
+
+  for (const a of b.areas) {
+    if (a.monthlyBudget <= 0) continue;
+    const pct = Math.round(a.ratio * 100);
+    if (a.overBudget) {
+      alerts.push({
+        title: `Área excedida: ${a.name}`,
+        message: `Vas en ${formatCurrency(a.spent)} de ${formatCurrency(a.monthlyBudget)} (${pct}%), te pasaste por ${formatCurrency(a.spent - a.monthlyBudget)}.${topCats(a.topCategories)}`,
+        category: "budget",
+        dedupeKey: `area-over-${cm}-${a.name}`,
+      });
+    } else if (a.ratio >= 0.8) {
+      alerts.push({
+        title: `Área casi agotada: ${a.name}`,
+        message: `Llevas ${formatCurrency(a.spent)} de ${formatCurrency(a.monthlyBudget)} (${pct}%). Te quedan ${formatCurrency(a.remaining)} para el resto de ${monthLabel(cm)}.${topCats(a.topCategories)}`,
+        category: "budget",
+        dedupeKey: `area-near-${cm}-${a.name}`,
+      });
+    }
+  }
+
+  if (b.plannedTotal > 0) {
+    const pct = Math.round((b.spentReal / b.plannedTotal) * 100);
+    const left = b.plannedTotal - b.spentReal;
+    alerts.push({
+      title: left >= 0 ? "Tope del mes: vas bien" : "Te pasaste del tope del mes",
+      message:
+        left >= 0
+          ? `Has gastado ${formatCurrency(b.spentReal)} de tu tope de ${formatCurrency(b.plannedTotal)} (${pct}%). Te quedan ${formatCurrency(left)} para el resto de ${monthLabel(cm)}.`
+          : `Has gastado ${formatCurrency(b.spentReal)} y tu tope era ${formatCurrency(b.plannedTotal)}: te excediste por ${formatCurrency(-left)}.`,
+      category: "budget",
+      dedupeKey: `plan-${cm}`,
+    });
+  }
+
+  if (b.unassignedSpent > 0) {
+    const top = b.unassigned
+      .slice(0, 3)
+      .map((u) => `${u.category} (${formatCurrency(u.amount)})`)
+      .join(", ");
+    alerts.push({
+      title: "Gasto sin área asignada",
+      message: `${formatCurrency(b.unassignedSpent)} de ${monthLabel(cm)} no cuentan en ningún presupuesto: ${top}. Así los límites por área están subestimados.`,
+      category: "budget",
+      dedupeKey: `unassigned-${cm}`,
+    });
+  }
+
   return alerts;
+}
+
+/** " (lo más caro: Comida 120.000)" para la cola de una alerta de área. */
+function topCats(cats: { category: string; amount: number }[]): string {
+  if (cats.length === 0) return "";
+  return ` Lo más caro: ${cats.slice(0, 2).map((c) => `${c.category} (${formatCurrency(c.amount)})`).join(", ")}.`;
 }
 
 async function runDetector(ctx: FinanceContext) {
@@ -226,7 +283,51 @@ function rulesReply(question: string, ctx: FinanceContext): string {
   const q = question.toLowerCase();
   const lines: string[] = [];
 
-  if (q.includes("deuda") || q.includes("pagar")) {
+  // Busca el nombre de un área dentro de la pregunta ("cómo voy en Transporte")
+  const b = ctx.budgets;
+  const asked = b.areas.find((a) => q.includes(a.name.toLowerCase()));
+
+  if (q.includes("área") || q.includes("area") || q.includes("presupuesto") || asked) {
+    if (b.areas.length === 0) {
+      lines.push("Todavía no tienes áreas de vida con presupuesto. Créalas en Áreas y te puedo decir cómo vas en cada una.");
+    } else if (asked) {
+      const pct = Math.round(asked.ratio * 100);
+      lines.push(`${asked.emoji ?? ""} ${asked.name} en ${monthLabel(ctx.currentMonth.month)}:`);
+      lines.push(`- Gastado: ${formatCurrency(asked.spent)}`);
+      if (asked.monthlyBudget > 0) {
+        lines.push(
+          `- Presupuesto: ${formatCurrency(asked.monthlyBudget)} (${pct}%)` +
+            (asked.overBudget
+              ? ` — te excediste por ${formatCurrency(asked.spent - asked.monthlyBudget)}.`
+              : ` — te quedan ${formatCurrency(asked.remaining)}.`),
+        );
+      } else {
+        lines.push("- Sin presupuesto definido para esta área.");
+      }
+      if (asked.topCategories.length > 0) {
+        lines.push(`- En qué se fue: ${asked.topCategories.map((c) => `${c.category} (${formatCurrency(c.amount)})`).join(", ")}`);
+      }
+    } else {
+      if (b.plannedTotal > 0) {
+        const left = b.plannedTotal - b.spentReal;
+        lines.push(
+          `Tu tope de ${monthLabel(ctx.currentMonth.month)} es ${formatCurrency(b.plannedTotal)} y llevas ${formatCurrency(b.spentReal)} (${Math.round((b.spentReal / b.plannedTotal) * 100)}%). ` +
+            (left >= 0 ? `Te quedan ${formatCurrency(left)}.` : `Te excediste por ${formatCurrency(-left)}.`),
+        );
+      }
+      lines.push(`Tus áreas (gastado / presupuesto):`);
+      for (const a of b.areas) {
+        const pct = a.monthlyBudget > 0 ? `${Math.round(a.ratio * 100)}%` : "sin presupuesto";
+        const mark = a.overBudget ? " ← excedida" : a.ratio >= 0.8 ? " ← casi agotada" : "";
+        lines.push(`- ${a.emoji ?? ""} ${a.name}: ${formatCurrency(a.spent)} / ${formatCurrency(a.monthlyBudget)} (${pct})${mark}`);
+      }
+      if (b.unassignedSpent > 0) {
+        lines.push(
+          `Ojo: ${formatCurrency(b.unassignedSpent)} del gasto del mes no están asignados a ninguna área, así que esas cifras los subestiman.`,
+        );
+      }
+    }
+  } else if (q.includes("deuda") || q.includes("pagar")) {
     const active = ctx.debts.filter((d) => d.isActive);
     if (active.length === 0) {
       lines.push("¡Buenas noticias! No tienes deudas activas. Puedes enfocar tu dinero en ahorro e inversión.");
@@ -283,7 +384,7 @@ function rulesReply(question: string, ctx: FinanceContext): string {
     if (ctx.summary.totalFixedExpenses > 0) {
       lines.push(`Tienes ${formatCurrency(ctx.summary.totalFixedExpenses)} en gastos fijos mensuales.`);
     }
-    lines.push("Puedes preguntarme: \"¿cómo voy este mes?\", \"¿qué deuda pago primero?\" o \"¿dónde puedo recortar gastos?\".");
+    lines.push("Puedes preguntarme: \"¿cómo voy este mes?\", \"¿qué deuda pago primero?\", \"¿cómo voy en Transporte?\" o \"¿dónde puedo recortar gastos?\".");
   }
 
   return lines.join("\n");

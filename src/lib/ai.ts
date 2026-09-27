@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { monthKey, shiftMonth } from "@/lib/finance-utils";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -66,6 +67,32 @@ export type FinanceContext = {
     category: string | null;
     date: string;
   }[];
+  budgets: {
+    /** tope general del mes; 0 = sin tope */
+    plannedTotal: number;
+    /** suma de presupuestos por área */
+    totalBudget: number;
+    /** gastado real del mes, incluido lo que no está asignado a un área */
+    spentReal: number;
+    /** gastado que no pertenece a ninguna área */
+    unassignedSpent: number;
+    unassigned: { category: string; amount: number }[];
+    areas: {
+      name: string;
+      emoji: string | null;
+      monthlyBudget: number;
+      spent: number;
+      remaining: number;
+      ratio: number;
+      overBudget: boolean;
+      topCategories: { category: string; amount: number }[];
+    }[];
+    /** gasto de los últimos meses por área, para ver tendencias */
+    history: {
+      month: string;
+      areas: { name: string; amount: number }[];
+    }[];
+  };
 };
 
 export async function buildFinanceContext(userId?: string): Promise<FinanceContext> {
@@ -115,7 +142,7 @@ export async function buildFinanceContext(userId?: string): Promise<FinanceConte
 
   const monthlyMap: Record<string, { income: number; expenses: number }> = {};
   for (const r of records) {
-    const key = `${r.date.getUTCFullYear()}-${String(r.date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const key = monthKey(r.date);
     if (!monthlyMap[key]) monthlyMap[key] = { income: 0, expenses: 0 };
     if (r.type === "income") monthlyMap[key].income += r.amount;
     else if (r.type === "expense") monthlyMap[key].expenses += r.amount;
@@ -125,12 +152,12 @@ export async function buildFinanceContext(userId?: string): Promise<FinanceConte
     .map(([month, data]) => ({ month, ...data }));
 
   const now = new Date();
-  const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const lastDate = new Date(now);
-  lastDate.setUTCMonth(lastDate.getUTCMonth() - 1);
-  const lastKey = `${lastDate.getUTCFullYear()}-${String(lastDate.getUTCMonth() + 1).padStart(2, "0")}`;
+  const currentKey = monthKey(now);
+  const lastKey = shiftMonth(currentKey, -1);
   const currentMonth = monthlyMap[currentKey] ?? { income: 0, expenses: 0 };
   const lastMonth = monthlyMap[lastKey] ?? { income: 0, expenses: 0 };
+
+  const budgets = await buildBudgets(uid, records, currentKey);
 
   const catMap: Record<string, number> = {};
   for (const r of records) {
@@ -169,6 +196,123 @@ export async function buildFinanceContext(userId?: string): Promise<FinanceConte
       ...r,
       date: r.date.toISOString().slice(0, 10),
     })),
+    budgets,
+  };
+}
+
+type BudgetRecord = { type: string; amount: number; category: string | null; date: Date };
+
+/** Meses de historial que se mandan a la IA para ver tendencias por área. */
+const HISTORY_MONTHS = 3;
+
+/**
+ * Presupuestos por área del mes, más lo que no quedó asignado a ninguna.
+ *
+ * Reusa los registros que `buildFinanceContext` ya cargó en vez de volver a
+ * consultar, así que no agrega queries ni puede desincronizarse del resto del
+ * contexto.
+ */
+async function buildBudgets(
+  uid: string,
+  records: BudgetRecord[],
+  currentKey: string,
+): Promise<FinanceContext["budgets"]> {
+  const [areas, mappings, plans] = await Promise.all([
+    db.lifeArea.findMany({
+      where: { userId: uid, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, emoji: true, monthlyBudget: true },
+    }),
+    db.categoryArea.findMany({
+      where: { userId: uid },
+      select: { category: true, areaId: true },
+    }),
+    db.monthlyBudget.findMany({
+      where: { userId: uid },
+      select: { month: true, amount: true },
+    }),
+  ]);
+
+  const areaByCategory = new Map<string, string>();
+  for (const m of mappings) areaByCategory.set(m.category.trim().toLowerCase(), m.areaId);
+
+  const nameByAreaId = new Map(areas.map((a) => [a.id, a]));
+
+  // areaId -> mes -> monto
+  const spend = new Map<string, Map<string, number>>();
+  const unassignedByMonth = new Map<string, number>();
+  const monthKeys: string[] = [];
+  for (let i = HISTORY_MONTHS - 1; i >= 0; i--) monthKeys.push(shiftMonth(currentKey, -i));
+
+  for (const r of records) {
+    if (r.type !== "expense") continue;
+    const key = monthKey(r.date);
+    if (!monthKeys.includes(key)) continue;
+
+    const cat = (r.category ?? "").trim();
+    const areaId = cat ? areaByCategory.get(cat.toLowerCase()) : undefined;
+    if (!areaId || !nameByAreaId.has(areaId)) {
+      unassignedByMonth.set(key, (unassignedByMonth.get(key) ?? 0) + r.amount);
+      continue;
+    }
+    if (!spend.has(areaId)) spend.set(areaId, new Map());
+    const bucket = spend.get(areaId)!;
+    bucket.set(key, (bucket.get(key) ?? 0) + r.amount);
+  }
+
+  const spentCurrent = spend;
+  const areaRows = areas.map((a) => {
+    const bucket = spentCurrent.get(a.id) ?? new Map<string, number>();
+    const spent = bucket.get(currentKey) ?? 0;
+    return {
+      name: a.name,
+      emoji: a.emoji,
+      monthlyBudget: a.monthlyBudget,
+      spent,
+      remaining: a.monthlyBudget - spent,
+      ratio: a.monthlyBudget > 0 ? spent / a.monthlyBudget : 0,
+      overBudget: a.monthlyBudget > 0 && spent > a.monthlyBudget,
+      topCategories: [...bucket.entries()]
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((x, y) => y.amount - x.amount)
+        .slice(0, 4),
+    };
+  });
+
+  // el "sin categoría" no se puede separar por área, se reporta aparte
+  const unassignedByCat = new Map<string, number>();
+  for (const r of records) {
+    if (r.type !== "expense" || monthKey(r.date) !== currentKey) continue;
+    const cat = (r.category ?? "").trim();
+    const areaId = cat ? areaByCategory.get(cat.toLowerCase()) : undefined;
+    if (areaId && nameByAreaId.has(areaId)) continue;
+    const label = cat || "(sin categoría)";
+    unassignedByCat.set(label, (unassignedByCat.get(label) ?? 0) + r.amount);
+  }
+  const unassigned = [...unassignedByCat.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const totalSpentInAreas = areaRows.reduce((s, a) => s + a.spent, 0);
+  const unassignedSpent = unassigned.reduce((s, a) => s + a.amount, 0);
+
+  return {
+    plannedTotal: plans.find((p) => p.month === currentKey)?.amount ?? 0,
+    totalBudget: areaRows.reduce((s, a) => s + a.monthlyBudget, 0),
+    spentReal: totalSpentInAreas + unassignedSpent,
+    unassignedSpent,
+    unassigned,
+    areas: areaRows,
+    history: monthKeys
+      .filter((k) => k !== currentKey)
+      .map((month) => ({
+        month,
+        areas: areas
+          .map((a) => ({ name: a.name, amount: spend.get(a.id)?.get(month) ?? 0 }))
+          .filter((x) => x.amount > 0)
+          .sort((x, y) => y.amount - x.amount),
+      }))
+      .filter((h) => h.areas.length > 0),
   };
 }
 
@@ -214,6 +358,55 @@ export function contextToPrompt(ctx: FinanceContext): string {
     }
   }
 
+  const b = ctx.budgets;
+  const budgetLines: string[] = [];
+
+  if (b.plannedTotal > 0) {
+    budgetLines.push(
+      `- Tope de gasto del mes: ${formatCurrency(b.plannedTotal)} (llevas ${formatCurrency(b.spentReal)}, ${Math.round((b.spentReal / b.plannedTotal) * 100)}%)`,
+    );
+  }
+  budgetLines.push(
+    `- Repartido entre áreas: ${formatCurrency(b.totalBudget)}. Gastado en áreas: ${formatCurrency(b.spentReal - b.unassignedSpent)}`,
+  );
+
+  if (b.unassignedSpent > 0) {
+    budgetLines.push(
+      `- ${formatCurrency(b.unassignedSpent)} del gasto NO está asignado a ningún área (estas alertas de presupuesto lo subestiman): ${b.unassigned
+        .slice(0, 5)
+        .map((u) => `${u.category} ${formatCurrency(u.amount)}`)
+        .join(", ")}`,
+    );
+  }
+
+  if (b.areas.length > 0) {
+    budgetLines.push(`- Áreas (gastado / presupuesto):`);
+    for (const a of b.areas) {
+      const pct = a.monthlyBudget > 0 ? ` (${Math.round(a.ratio * 100)}%)` : " (sin presupuesto)";
+      const flag = a.overBudget ? " ¡EXCEDIDA!" : a.ratio >= 0.8 ? " ⚠ casi agotada" : "";
+      const cats = a.topCategories.length
+        ? ` | ${a.topCategories.map((c) => `${c.category}: ${formatCurrency(c.amount)}`).join(", ")}`
+        : "";
+      budgetLines.push(
+        `  - ${a.name}: ${formatCurrency(a.spent)} / ${formatCurrency(a.monthlyBudget)}${pct}${flag}${cats}`,
+      );
+    }
+  }
+
+  if (b.history.length > 0) {
+    budgetLines.push(`- Gasto por área en meses anteriores:`);
+    for (const h of b.history) {
+      const detail = h.areas.map((a) => `${a.name}: ${formatCurrency(a.amount)}`).join(", ");
+      budgetLines.push(`  - ${monthLabel(h.month)}: ${detail}`);
+    }
+  }
+
+  if (budgetLines.length > 0) {
+    lines.push("");
+    lines.push(`# Presupuestos por área`);
+    lines.push(...budgetLines);
+  }
+
   return lines.join("\n");
 }
 
@@ -223,7 +416,14 @@ Usas los datos financieros del usuario que se te proporcionan para responder con
 Si no tienes datos suficientes para responder, dilo honestamente.
 Formatea montos en pesos colombianos (COP) con formato de moneda colombiana.
 Sé conciso: responde en máximo 3-4 párrafos o listas breves.
-Puedes dar recomendaciones de ahorro, orden de pago de deudas (prioriza mayor interés), reducción de gastos y planificación.`;
+Puedes dar recomendaciones de ahorro, orden de pago de deudas (prioriza mayor interés), reducción de gastos y planificación.
+
+Sobre los presupuestos por área:
+- Cuando el usuario pregunte por un área o presupuesto, usa SIEMPRE los números de la sección "Presupuestos por área".
+- Si un área aparece como EXCEDIDA, di cuál es el exceso y qué categorías lo estemos, sin inventar.
+- Si hay gasto sin asignar a un área, menciona que ese dinero no está entrando en ningún presupuesto y que conviene asignarlo.
+- No recomiendes bajar el presupuesto de un área para que los números "cuadren": si el gasto es real, el problema es el gasto, no el límite.
+- Si te piden cambiar algo (presupuestos, asignar categorías), describe el cambio concreto y deja que el usuario lo confirme antes de aplicarlo.`;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
