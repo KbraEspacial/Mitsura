@@ -9,6 +9,7 @@ import {
   getCategories,
   exportFinanceToCSV,
   toggleExcludeFromBalance,
+  applyAutoClassify,
   type FinanceRecordData,
   type CategoryInfo,
 } from "@/lib/actions/finance";
@@ -129,6 +130,30 @@ export default function IngresosPage() {
     await toggleExcludeFromBalance(record.id, next);
   };
 
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+
+  const handleAutoClassify = async () => {
+    setAutoBusy(true);
+    setAutoMsg(null);
+    try {
+      const r = await applyAutoClassify();
+      const parts: string[] = [];
+      if (r.excluded > 0) parts.push(`${r.excluded} excluido${r.excluded > 1 ? "s" : ""}`);
+      if (r.restored > 0) parts.push(`${r.restored} restaurado${r.restored > 1 ? "s" : ""}`);
+      setAutoMsg(
+        parts.length
+          ? `Deteccion automatica: ${parts.join(", ")}.`
+          : "Deteccion automatica: todo estaba correcto.",
+      );
+      await fetchRecords();
+    } catch (e) {
+      setAutoMsg(e instanceof Error ? e.message : "Error al aplicar la deteccion");
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   const handleExport = async () => {
     const csv = await exportFinanceToCSV("income");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -151,16 +176,35 @@ export default function IngresosPage() {
         <h2 className="text-2xl font-bold tracking-tight">
           {editingId ? "Editar ingreso" : "Ingresos"}
         </h2>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Exportar CSV
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleAutoClassify}
+            disabled={autoBusy}
+            title="Detecta prestamos, abonos de cuota y transferencias entre tus cuentas, y los excluye del saldo automaticamente"
+            className="flex items-center gap-1.5 rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 disabled:opacity-50 dark:text-blue-400"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+            </svg>
+            {autoBusy ? "Analizando..." : "Deteccion automatica"}
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Exportar CSV
+          </button>
+        </div>
       </div>
+
+      {autoMsg && (
+        <div className="mb-4 rounded-lg border border-blue-400/30 bg-blue-500/10 px-3.5 py-2.5 text-xs text-blue-700 dark:text-blue-300">
+          {autoMsg}
+        </div>
+      )}
 
       <form
         onSubmit={handleSubmit}

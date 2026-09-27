@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { monthKey, currentMonthKey } from "@/lib/finance-utils";
+import { classifyDescription } from "@/lib/finance-rules";
 
 export type FinanceSummary = {
   /** Suma de ingresos NO marcados como excludeFromBalance (histórico) */
@@ -309,6 +310,80 @@ export async function getReconciliations(limit = 20) {
   });
 }
 
+export type AutoClassifyPreview = {
+  toExclude: { id: string; description: string; amount: number; date: Date; label: string }[];
+  toRestore: { id: string; description: string; amount: number; date: Date }[];
+  toReview: { id: string; description: string; amount: number; date: Date; label: string }[];
+};
+
+/** Analiza los ingresos y devuelve que cambiaria la deteccion automatica. */
+export async function previewAutoClassify(): Promise<AutoClassifyPreview> {
+  const session = await getSession();
+  if (!session) return { toExclude: [], toRestore: [], toReview: [] };
+
+  const records = await db.financeRecord.findMany({
+    where: { userId: session.id, type: "income" },
+    select: { id: true, description: true, amount: true, date: true, excludeFromBalance: true },
+    orderBy: { date: "desc" },
+  });
+
+  const out: AutoClassifyPreview = { toExclude: [], toRestore: [], toReview: [] };
+  for (const r of records) {
+    const c = classifyDescription(r.description);
+    const base = { id: r.id, description: r.description ?? "(sin descripcion)", amount: r.amount, date: r.date };
+    if (c.verdict === "notIncome" && !r.excludeFromBalance) out.toExclude.push({ ...base, label: c.label });
+    else if (c.verdict === "review" && !r.excludeFromBalance) out.toReview.push({ ...base, label: c.label });
+    else if (c.verdict === "income" && r.excludeFromBalance) out.toRestore.push(base);
+  }
+  return out;
+}
+
+/**
+ * Aplica la deteccion automatica: excluye lo que no es ingreso real y
+ * restaura lo que el usuario habia marcado a mano pero si es ingreso.
+ * No toca montos, fechas ni descripciones.
+ */
+export async function applyAutoClassify(): Promise<{ excluded: number; restored: number }> {
+  const session = await getSession();
+  if (!session) return { excluded: 0, restored: 0 };
+
+  const preview = await previewAutoClassify();
+
+  for (const r of preview.toExclude) {
+    await db.financeRecord.updateMany({
+      where: { id: r.id, userId: session.id },
+      data: { excludeFromBalance: true },
+    });
+  }
+  for (const r of preview.toRestore) {
+    await db.financeRecord.updateMany({
+      where: { id: r.id, userId: session.id },
+      data: { excludeFromBalance: false },
+    });
+  }
+
+  return { excluded: preview.toExclude.length, restored: preview.toRestore.length };
+}
+
+/** Reconstruye la linea base de forma automatica, sin digitar el saldo. */
+export async function getAutoReconciliation(): Promise<{ amount: number; note: string } | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  const last = await db.balanceReconciliation.findFirst({
+    where: { userId: session.id },
+    orderBy: { date: "desc" },
+    select: { amount: true, date: true },
+  });
+
+  const summary = await getFinanceSummary();
+  const note = last
+    ? `Saldo anterior ${summary.reconciliationBase.toLocaleString("es-CO")} + movimientos ${summary.movementsSinceReconciliation.toLocaleString("es-CO")}`
+    : `Calculado automaticamente: ingresos ${summary.totalIncome.toLocaleString("es-CO")} - gastos ${summary.totalExpenses.toLocaleString("es-CO")}`;
+
+  return { amount: Math.round(summary.saldoReal), note };
+}
+
 export async function getFinanceRecords(type?: string) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
@@ -327,6 +402,12 @@ export async function createFinanceRecord(data: FinanceRecordData) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
 
+  // Clasificacion automatica: un "Prestamo" o una "cuota de moto" son plata
+  // que sale, no ingreso real. Se marca al crear para que el saldo no se
+  // descuadre sin que el usuario tenga que acordarse de excluirlo.
+  const autoExcluded =
+    data.type === "income" && classifyDescription(data.description).verdict === "notIncome";
+
   return db.financeRecord.create({
     data: {
       type: data.type,
@@ -334,6 +415,7 @@ export async function createFinanceRecord(data: FinanceRecordData) {
       description: data.description,
       category: data.category,
       date: data.date ?? new Date(),
+      excludeFromBalance: autoExcluded,
       userId: session.id,
     },
   });
