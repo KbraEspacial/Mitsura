@@ -4,16 +4,36 @@ import { getSession } from "@/lib/auth";
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
-export type AiMode = "gemini" | "rules";
+export type AiMode = "nvidia" | "gemini" | "rules";
 
 export function getAiMode(): AiMode {
-  return process.env.GEMINI_API_KEY ? "gemini" : "rules";
+  if (process.env.NVIDIA_API_KEY) return "nvidia";
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  return "rules";
 }
 
-// Lista en orden de preferencia: se prueban en cascada si una falla o no tiene
-// capacidad. El alias "-latest" se actualiza solo y evita que un modelo
-// retirado (como 2.5-flash para cuentas nuevas) rompa la app.
-const GEMINI_MODELS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-flash"];
+export type AiProvider = "nvidia" | "google";
+
+type ChainEntry = { provider: AiProvider; model: string };
+
+/**
+ * Cascada de proveedores. NVIDIA es el principal; Google queda de respaldo.
+ *
+ * Se prueban en orden y se cae al siguiente si el anterior falla, no tiene
+ * capacidad (429/503) o fue retirado (404/410). Los modelos rotan rapido en
+ * ambos servicios, por eso la lista tiene varias entradas por proveedor.
+ */
+const CHAIN: ChainEntry[] = [
+  { provider: "nvidia", model: "moonshotai/kimi-k3" },
+  { provider: "nvidia", model: "google/gemma-4-31b-it" },
+  { provider: "google", model: "gemini-flash-latest" },
+  { provider: "google", model: "gemini-3.8-flash" },
+];
+
+const keyFor = (p: AiProvider) =>
+  p === "nvidia" ? process.env.NVIDIA_API_KEY : process.env.GEMINI_API_KEY;
+
+export type AiContents = { role: "user" | "model"; parts: { text: string }[] }[];
 
 export type ChatTurn = { role: "user" | "model"; content: string };
 
@@ -205,64 +225,124 @@ Formatea montos en pesos colombianos (COP) con formato de moneda colombiana.
 Sé conciso: responde en máximo 3-4 párrafos o listas breves.
 Puedes dar recomendaciones de ahorro, orden de pago de deudas (prioriza mayor interés), reducción de gastos y planificación.`;
 
-async function geminiRequest(
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Un modelo que se cuelga no debe congelar la cascada entera: si no responde
+ * en este tiempo se da por caido y se prueba el siguiente de la lista.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+const timeoutSignal = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+
+/** NVIDIA NIM: endpoint compatible con OpenAI (messages). */
+async function callNvidia(
+  model: string,
+  key: string,
   systemInstruction: string,
-  contents: { role: "user" | "model"; parts: { text: string }[] }[],
-): Promise<string> {
-  const key = process.env.GEMINI_API_KEY!;
+  contents: AiContents,
+): Promise<{ ok: boolean; retryable: boolean; text?: string; error?: string }> {
+  const messages = [
+    { role: "system", content: systemInstruction },
+    ...contents.map((c) => ({
+      role: c.role === "model" ? "assistant" : "user",
+      content: c.parts.map((p) => p.text).join(""),
+    })),
+  ];
+
+  const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 2048 }),
+    signal: timeoutSignal(),
+  }).catch((e: unknown) => {
+    const name = e instanceof Error ? e.name : "";
+    return name === "TimeoutError"
+      ? { ok: false as const, status: 504, text: async () => "timeout" }
+      : Promise.reject(e);
+  });
+
+  if (res.status === 429 || res.status === 503) {
+    return { ok: false, retryable: true, error: `${res.status} sin capacidad` };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    // 404/410 = el modelo ya no existe en la cuenta, no es falta de capacidad
+    return { ok: false, retryable: false, error: `${res.status} ${body.slice(0, 100)}` };
+  }
+
+  const data = await res.json();
+  const texto = (data?.choices?.[0]?.message?.content ?? "").trim();
+  if (texto) return { ok: true, retryable: false, text: texto };
+  return { ok: false, retryable: false, error: "respuesta vacia" };
+}
+
+/** Google Gemini: endpoint generateContent (contents + parts). */
+async function callGoogle(
+  model: string,
+  key: string,
+  systemInstruction: string,
+  contents: AiContents,
+): Promise<{ ok: boolean; retryable: boolean; text?: string; error?: string }> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents,
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+    }),
+    signal: timeoutSignal(),
+  }).catch((e: unknown) => {
+    const name = e instanceof Error ? e.name : "";
+    return name === "TimeoutError"
+      ? { ok: false as const, status: 504, text: async () => "timeout" }
+      : Promise.reject(e);
+  });
+
+  if (res.status === 429 || res.status === 503) {
+    return { ok: false, retryable: true, error: `${res.status} sin capacidad` };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, retryable: false, error: `${res.status} ${body.slice(0, 100)}` };
+  }
+
+  const data = await res.json();
+  if (data?.promptFeedback?.blockReason) {
+    return { ok: false, retryable: false, error: "bloqueado por filtro de seguridad" };
+  }
+  const partes = (data?.candidates?.[0]?.content?.parts ?? []) as { text?: string; thought?: boolean }[];
+  const texto = partes
+    .filter((p) => !p.thought && typeof p.text === "string")
+    .map((p) => p.text)
+    .join("")
+    .trim();
+  if (texto) return { ok: true, retryable: false, text: texto };
+  return { ok: false, retryable: false, error: "respuesta vacia" };
+}
+
+/** Intenta la cascada completa. NVIDIA primero, Google de respaldo. */
+async function aiRequest(systemInstruction: string, contents: AiContents): Promise<string> {
   const errores: string[] = [];
 
-  for (const model of GEMINI_MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  for (const entry of CHAIN) {
+    const key = keyFor(entry.provider);
+    if (!key) continue;
 
-    for (let intento = 1; intento <= 3; intento++) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-        }),
-      });
+    for (let intento = 1; intento <= 2; intento++) {
+      const call = entry.provider === "nvidia" ? callNvidia : callGoogle;
+      const r = await call(entry.model, key, systemInstruction, contents);
 
-      // 429/503 = capacidad o cuota momentanea: reintenta con espera corta
-      if (res.status === 429 || res.status === 503) {
-        if (intento < 3) {
-          await new Promise((r) => setTimeout(r, 1200 * intento));
-          continue;
-        }
-        errores.push(`${model}: ${res.status} sin capacidad`);
-        break;
-      }
+      if (r.ok && r.text) return r.text;
+      errores.push(`${entry.provider}/${entry.model}: ${r.error}`);
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        errores.push(`${model}: ${res.status} ${body.slice(0, 120)}`);
-        break;
-      }
-
-      const data = await res.json();
-      if (data?.promptFeedback?.blockReason) {
-        throw new Error("La consulta fue bloqueada por el filtro de seguridad de Gemini.");
-      }
-      // Descarta partes de razonamiento (thought) de los modelos 3.x
-      const partes = (data?.candidates?.[0]?.content?.parts ?? []) as {
-        text?: string;
-        thought?: boolean;
-      }[];
-      const texto = partes
-        .filter((p) => !p.thought && typeof p.text === "string")
-        .map((p) => p.text)
-        .join("")
-        .trim();
-      if (texto) return texto;
-      errores.push(`${model}: respuesta vacia`);
-      break;
+      if (!r.retryable) break;
+      if (intento < 2) await sleep(1200);
     }
   }
 
-  throw new Error(`Gemini no respondio. ${errores.join(" | ")}`);
+  throw new Error(`Ningun proveedor de IA respondio. ${errores.join(" | ")}`);
 }
 
 export async function runGeminiChat(
@@ -275,7 +355,7 @@ export async function runGeminiChat(
     ...history.map((h) => ({ role: h.role, parts: [{ text: h.content }] })),
     { role: "user", parts: [{ text: question }] },
   ];
-  return geminiRequest(FINANCE_SYSTEM_PROMPT, contents);
+  return aiRequest(FINANCE_SYSTEM_PROMPT, contents);
 }
 
 /**
@@ -286,7 +366,7 @@ export async function geminiText(
   systemInstruction: string,
   contents: { role: "user" | "model"; parts: { text: string }[] }[],
 ): Promise<string> {
-  return geminiRequest(systemInstruction, contents);
+  return aiRequest(systemInstruction, contents);
 }
 
 export async function runGeminiAnalysis(ctx: FinanceContext): Promise<{
@@ -295,7 +375,7 @@ export async function runGeminiAnalysis(ctx: FinanceContext): Promise<{
   alertas: string[];
 }> {
   const prompt = `${contextToPrompt(ctx)}\n\nAnaliza las finanzas del usuario y responde en JSON estricto con esta estructura (sin markdown, solo JSON):\n{"resumen": "...", "recomendaciones": ["..."], "alertas": ["..."]}\n\nIncluye: resumen del estado financiero actual, 2-4 recomendaciones accionables y 0-4 alertas detectadas.`;
-  const raw = await geminiRequest(FINANCE_SYSTEM_PROMPT, [
+  const raw = await aiRequest(FINANCE_SYSTEM_PROMPT, [
     { role: "user", parts: [{ text: prompt }] },
   ]);
   try {

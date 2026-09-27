@@ -39,7 +39,7 @@ export default function IaPage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [busy, setBusy] = useState(true);
-  const [mode, setMode] = useState<"gemini" | "rules">("rules");
+  const [mode, setMode] = useState<"nvidia" | "gemini" | "rules">("rules");
   const [messages, setMessages] = useState<ChatTurn[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -88,17 +88,19 @@ export default function IaPage() {
         <h2 className="text-2xl font-bold tracking-tight">Asistente financiero IA</h2>
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            mode === "gemini"
+            mode !== "rules"
               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
               : "bg-gray-100 text-muted-foreground dark:bg-gray-800 dark:text-gray-300"
           }`}
           title={
-            mode === "gemini"
-              ? "Usando Google Gemini"
-              : "Sin GEMINI_API_KEY. Agrega la key en .env para activar Gemini."
+            mode === "nvidia"
+              ? "Proveedor principal: NVIDIA NIM. Google Gemini como respaldo."
+              : mode === "gemini"
+                ? "Proveedor principal: Google Gemini."
+                : "Sin API keys. Agrega NVIDIA_API_KEY o GEMINI_API_KEY en .env para activar la IA."
           }
         >
-          {mode === "gemini" ? "✦ Gemini activo" : "Modo análisis"}
+          {mode === "nvidia" ? "✦ NVIDIA activo" : mode === "gemini" ? "✦ Gemini activo" : "Modo análisis"}
         </span>
       </div>
 

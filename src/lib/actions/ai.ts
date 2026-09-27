@@ -9,6 +9,7 @@ import {
   runGeminiAnalysis,
   type ChatTurn,
   type FinanceContext,
+  type AiMode,
 } from "@/lib/ai";
 
 const formatCurrency = (amount: number) =>
@@ -55,7 +56,7 @@ function simpleHash(s: string): string {
   return h.toString(36);
 }
 
-export async function getAiModeAction(): Promise<"gemini" | "rules"> {
+export async function getAiModeAction(): Promise<AiMode> {
   const session = await getSession();
   if (!session) return "rules";
   return getAiMode();
@@ -291,7 +292,7 @@ function rulesReply(question: string, ctx: FinanceContext): string {
 export async function askFinanceAI(
   question: string,
   history: ChatTurn[],
-): Promise<{ reply: string; mode: "gemini" | "rules" }> {
+): Promise<{ reply: string; mode: AiMode }> {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
 
