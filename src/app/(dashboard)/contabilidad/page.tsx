@@ -18,6 +18,7 @@ import {
   markAllAIAlertsRead,
   type AiAlertInfo,
 } from "@/lib/actions/ai";
+import { runReconcileAgent, type ReconcileReport } from "@/lib/actions/reconcile-agent";
 
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("es-CO", { style: "currency", currency: "COP" });
@@ -50,6 +51,19 @@ export default function ContabilidadPage() {
   const [reconcileNote, setReconcileNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentReport, setAgentReport] = useState<ReconcileReport | null>(null);
+
+  const runAgent = async () => {
+    setAgentBusy(true);
+    try {
+      setAgentReport(await runReconcileAgent());
+      setAgentOpen(true);
+    } finally {
+      setAgentBusy(false);
+    }
+  };
 
   const loadSummary = useCallback(async () => {
     const s = await getFinanceSummary();
@@ -192,6 +206,88 @@ export default function ContabilidadPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panel del agente de conciliacion */}
+      {agentOpen && agentReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setAgentOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-background p-6 shadow-xl"
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Agente de conciliacion</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Saldo real <strong className="text-foreground">{formatCurrency(agentReport.saldoReal)}</strong>
+                  {" · "}ancla {formatCurrency(agentReport.base)}
+                  {" · "}movimientos {formatCurrency(agentReport.movements)}
+                </p>
+              </div>
+              <button
+                onClick={() => setAgentOpen(false)}
+                className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {agentReport.findings.length === 0 ? (
+              <p className="rounded-lg bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+                No detecte anomalias. Los registros se ven consistentes.
+              </p>
+            ) : (
+              <ul className="space-y-2.5">
+                {agentReport.findings.map((f, i) => (
+                  <li
+                    key={i}
+                    className={`rounded-lg border px-3.5 py-3 ${
+                      f.severity === "alto"
+                        ? "border-red-500/30 bg-red-500/10"
+                        : f.severity === "medio"
+                          ? "border-amber-500/30 bg-amber-500/10"
+                          : "border-border bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground">{f.title}</p>
+                      {f.impact > 0 && (
+                        <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                          {formatCurrency(f.impact)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{f.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {agentReport.agentComment ? (
+              <div className="mt-4 rounded-lg border border-blue-400/30 bg-blue-500/10 px-3.5 py-3">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                  Lectura del agente
+                </p>
+                <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+                  {agentReport.agentComment}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-lg bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
+                {agentReport.agentAvailable
+                  ? "Sin lectura del agente."
+                  : "El agente no respondio (falta GEMINI_API_KEY en el servidor). Los hallazgos de arriba se calculan sin IA."}
+              </p>
+            )}
+
+            <p className="mt-4 text-[11px] text-muted-foreground/70">
+              El agente solo propone: no modifico ningun registro ni ninguna cifra.
+            </p>
           </div>
         </div>
       )}
@@ -360,15 +456,27 @@ export default function ContabilidadPage() {
                 : "Sin conciliar · el saldo no es confiable"}
             </p>
           </div>
-          <button
-            onClick={() => {
-              setReconcileAmount(String(summary.balance));
-              setReconcileOpen(true);
-            }}
-            className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Conciliar
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={runAgent}
+              disabled={agentBusy}
+              className="flex items-center gap-1.5 rounded-md border border-blue-400/40 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 disabled:opacity-50 dark:text-blue-400"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              {agentBusy ? "Analizando..." : "Agente"}
+            </button>
+            <button
+              onClick={() => {
+                setReconcileAmount(String(summary.balance));
+                setReconcileOpen(true);
+              }}
+              className="rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Conciliar
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-4 rounded-xl border border-border bg-background p-5 shadow-sm">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-amber-100 text-amber-600">

@@ -278,6 +278,17 @@ export async function runGeminiChat(
   return geminiRequest(FINANCE_SYSTEM_PROMPT, contents);
 }
 
+/**
+ * Llamada libre a Gemini con un system prompt propio.
+ * La usan modulos que ya traen su propio contexto (conciliacion, presupuestos).
+ */
+export async function geminiText(
+  systemInstruction: string,
+  contents: { role: "user" | "model"; parts: { text: string }[] }[],
+): Promise<string> {
+  return geminiRequest(systemInstruction, contents);
+}
+
 export async function runGeminiAnalysis(ctx: FinanceContext): Promise<{
   resumen: string;
   recomendaciones: string[];
