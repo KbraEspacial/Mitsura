@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { monthKey, currentMonthKey } from "@/lib/finance-utils";
-import { classifyDescription } from "@/lib/finance-rules";
+import { classifyDescription, countsAsEarnedIncome } from "@/lib/finance-rules";
 
 export type FinanceSummary = {
   /** Suma de ingresos NO marcados como excludeFromBalance (histórico) */
@@ -184,11 +184,14 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
 
   const records = await db.financeRecord.findMany({
     where: { userId: session.id },
-    select: { type: true, amount: true, date: true, excludeFromBalance: true },
+    select: { type: true, amount: true, date: true, description: true, excludeFromBalance: true },
   });
 
+  // Un ingreso cuenta como "ganado" solo si las reglas lo dicen. Un prestamo
+  // recibido o una devolucion aumentan tu efectivo pero no son ingreso, asi
+  // que se ven en el saldo y no en el total de ingresos.
   const totalIncome = records
-    .filter((r) => r.type === "income" && !r.excludeFromBalance)
+    .filter((r) => r.type === "income" && countsAsEarnedIncome(r.description))
     .reduce((sum, r) => sum + r.amount, 0);
   const totalExpenses = records
     .filter((r) => r.type === "expense")
@@ -331,9 +334,11 @@ export async function previewAutoClassify(): Promise<AutoClassifyPreview> {
   for (const r of records) {
     const c = classifyDescription(r.description);
     const base = { id: r.id, description: r.description ?? "(sin descripcion)", amount: r.amount, date: r.date };
+    // cashOnly = plata que entra pero no es ingreso: el saldo ya la cuenta, no
+    // hay que marcarla. Se deja quieta salvo que el usuario la haya excluido a mano.
     if (c.verdict === "notIncome" && !r.excludeFromBalance) out.toExclude.push({ ...base, label: c.label });
     else if (c.verdict === "review" && !r.excludeFromBalance) out.toReview.push({ ...base, label: c.label });
-    else if (c.verdict === "income" && r.excludeFromBalance) out.toRestore.push(base);
+    else if (c.verdict !== "notIncome" && c.verdict !== "review" && r.excludeFromBalance) out.toRestore.push(base);
   }
   return out;
 }
@@ -402,9 +407,10 @@ export async function createFinanceRecord(data: FinanceRecordData) {
   const session = await getSession();
   if (!session) throw new Error("No autenticado");
 
-  // Clasificacion automatica: un "Prestamo" o una "cuota de moto" son plata
-  // que sale, no ingreso real. Se marca al crear para que el saldo no se
-  // descuadre sin que el usuario tenga que acordarse de excluirlo.
+  // Solo se marca `excludeFromBalance` cuando el dinero NO entra al saldo real
+  // (traspaso entre cuentas propias, prestamo entregado a un tercero). Un
+  // prestamo recibido o una devolucion si son efectivo real: cuentan en el
+  // saldo aunque no cuenten como ingreso ganado.
   const autoExcluded =
     data.type === "income" && classifyDescription(data.description).verdict === "notIncome";
 
